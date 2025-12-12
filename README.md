@@ -1,43 +1,35 @@
-📘 DOCUMENTAÇÃO ARQUITETURAL – CENTRAL-SYSTEM-API
+# 📘 DOCUMENTAÇÃO ARQUITETURAL – CENTRAL-SYSTEM-API
 
-The Sovereign Nexus Architecture – ASPPIBRA DAO
-Versão: 1.0
-Última atualização: 12/12/2025
+## The Sovereign Nexus Architecture – ASPPIBRA DAO
+**Versão:** 1.0  
+**Última atualização:** 12/12/2025
 
-1. Visão Geral
+---
 
-O CENTRAL-SYSTEM-API atua como a autoridade central ("Mothership") da arquitetura Hub-and-Spoke da ASPPIBRA DAO.
+## 1. Visão Geral
+
+O `CENTRAL-SYSTEM-API` atua como a autoridade central ("Mothership") da arquitetura Hub-and-Spoke da ASPPIBRA DAO.
 Ele funciona como:
 
-API Gateway
+*   API Gateway
+*   Núcleo de Identidade e Governança
+*   Orquestrador de Microsserviços Web2 / Web3
+*   Camada de Segurança e Compliance
+*   Ponto Único de Observabilidade e Monitoramento
 
-Núcleo de Identidade e Governança
+A solução está implementada sobre **Cloudflare Workers**, adotando:
 
-Orquestrador de Microsserviços Web2 / Web3
+*   **Hono.js** como framework HTTP
+*   **Cloudflare D1** como banco relacional
+*   **Cloudflare R2** para storage
+*   **Drizzle ORM**
+*   **Zod** para validação
+*   **JWT** para identidade
+*   **IPFS/Pinata** para armazenamento descentralizado
+*   **RWA/Agro Modules** para lógica blockchain
 
-Camada de Segurança e Compliance
-
-Ponto Único de Observabilidade e Monitoramento
-
-A solução está implementada sobre Cloudflare Workers, adotando:
-
-Hono.js como framework HTTP
-
-Cloudflare D1 como banco relacional
-
-Cloudflare R2 para storage
-
-Drizzle ORM
-
-Zod para validação
-
-JWT para identidade
-
-IPFS/Pinata para armazenamento descentralizado
-
-RWA/Agro Modules para lógica blockchain
-
-2. Estrutura de Diretórios (Formalizada)
+## 2. Estrutura de Diretórios (Formalizada)
+```
 central-system-api/
 ├── .dev.vars                 # Secrets locais (não versionados)
 ├── .gitignore
@@ -84,80 +76,55 @@ central-system-api/
     │       └── health.ts     # Monitoramento
     │
     └── index.ts              # Ponto de entrada do Worker
+```
 
-3. Objetivos Arquiteturais
-3.1 Principais Metas
+## 3. Objetivos Arquiteturais
+### 3.1 Principais Metas
+*   Centralizar segurança, autenticação e governança.
+*   Prover um único ponto de integração entre Web2, Web3 e infraestrutura DAO.
+*   Oferecer modularidade e escalabilidade via API Gateway.
+*   Reduzir acoplamento entre serviços.
+*   Garantir rastreabilidade para transparência DAO.
 
-Centralizar segurança, autenticação e governança.
+### 3.2 Drivers Arquiteturais
+*   Operação distribuída em escala
+*   Confiabilidade e auditabilidade
+*   Baixo custo (Workers)
+*   Alta performance global
+*   Conformidade organizacional (DAO)
 
-Prover um único ponto de integração entre Web2, Web3 e infraestrutura DAO.
+## 4. Componentes Principais
+#### 4.1 API Gateway
+*   Entrada única para todas as aplicações Web, Mobile, IoT e DApps.
+*   Gerencia rotas, versionamento e throttling.
 
-Oferecer modularidade e escalabilidade via API Gateway.
+#### 4.2 Módulo de Identidade (IdM)
+*   Emite e valida tokens JWT.
+*   Integra com biometria, wallets Web3 ou credenciais Web2.
+*   Suporte planejado para DID.
 
-Reduzir acoplamento entre serviços.
+#### 4.3 Orquestrador de Serviços
+*   Router baseado em Hono.
+*   Módulos independentes para auth, usuários, pagamentos, etc.
+*   Permite evolução incremental.
 
-Garantir rastreabilidade para transparência DAO.
+#### 4.4 Persistência
+*   D1 + Drizzle ORM
+*   Migrações versionadas
+*   Operações atomicamente consistentes
 
-3.2 Drivers Arquiteturais
+#### 4.5 Armazenamento Descentralizado
+*   IPFS via Pinata Proxy
+*   Assinatura de arquivos
+*   Verificação de CID
 
-Operação distribuída em escala
+#### 4.6 RWA & Agro Services (Blockchain Layer)
+*   Tokenização de ativos reais
+*   Registro de produção agroecológica
+*   Auditoria e rastreabilidade
 
-Confiabilidade e auditabilidade
-
-Baixo custo (Workers)
-
-Alta performance global
-
-Conformidade organizacional (DAO)
-
-4. Componentes Principais
-4.1 API Gateway
-
-Entrada única para todas as aplicações Web, Mobile, IoT e DApps.
-
-Gerencia rotas, versionamento e throttling.
-
-4.2 Módulo de Identidade (IdM)
-
-Emite e valida tokens JWT.
-
-Integra com biometria, wallets Web3 ou credenciais Web2.
-
-Suporte planejado para DID.
-
-4.3 Orquestrador de Serviços
-
-Router baseado em Hono.
-
-Módulos independentes para auth, usuários, pagamentos, etc.
-
-Permite evolução incremental.
-
-4.4 Persistência
-
-D1 + Drizzle ORM
-
-Migrações versionadas
-
-Operações atomicamente consistentes
-
-4.5 Armazenamento Descentralizado
-
-IPFS via Pinata Proxy
-
-Assinatura de arquivos
-
-Verificação de CID
-
-4.6 RWA & Agro Services (Blockchain Layer)
-
-Tokenização de ativos reais
-
-Registro de produção agroecológica
-
-Auditoria e rastreabilidade
-
-5. Diagrama C4 – Nível 1 (Contexto)
+## 5. Diagrama C4 – Nível 1 (Contexto)
+```text
                           +----------------------+
                           |     Usuários         |
                           |  Web / Mobile / IoT  |
@@ -175,8 +142,10 @@ Auditoria e rastreabilidade
           | Serviços Internos   |     |    Sistemas Externos   |
           | (Auth, Users, etc.) |     | (Pagamentos, IPFS etc.)|
           +---------------------+     +-------------------------+
+```
 
-6. Diagrama C4 – Nível 2 (Containers)
+## 6. Diagrama C4 – Nível 2 (Containers)
+```text
 +---------------------------------------------------------------+
 |                  CENTRAL-SYSTEM-API (Worker)                  |
 |---------------------------------------------------------------|
@@ -196,8 +165,10 @@ Auditoria e rastreabilidade
 |      | External Services: Pagamentos / Webhooks      |        |
 |      +-----------------------------------------------+        |
 +---------------------------------------------------------------+
+```
 
-7. Diagrama de Fluxo – Autenticação JWT
+## 7. Diagrama de Fluxo – Autenticação JWT
+```text
 [Cliente]
     |
     | POST /auth/login
@@ -215,15 +186,19 @@ Auditoria e rastreabilidade
     |
     v
 [Resposta: token + payload]
+```
 
-8. Diagrama de Fluxo – Rota Protegida
+## 8. Diagrama de Fluxo – Rota Protegida
+```text
 [Cliente] --> GET /users/me --> [Middleware auth-jwt] --> token válido? 
                                                        |     |
                                                       não   sim
                                                        |     v
                                                   401 erro   [Controller]
+```
 
-9. API Gateway Routing (Visão Modular)
+## 9. API Gateway Routing (Visão Modular)
+```
 /api
  ├── /auth
  ├── /users
@@ -233,22 +208,46 @@ Auditoria e rastreabilidade
  ├── /agro
  ├── /ipfs
  └── /health
+```
 
-10. Recomendações de Evolução
-Curto prazo
+## 10. Recomendações de Evolução
+#### Curto prazo
+*   Adicionar testes e2e com Miniflare.
+*   Criar logs estruturados.
 
-Adicionar testes e2e com Miniflare.
+#### Médio prazo
+*   Implementar refresh tokens.
+*   Criar auditoria on-chain opcional para módulos sensíveis.
 
-Criar logs estruturados.
+#### Longo prazo
+*   Introduzir DID/VC (Identidade Descentralizada).
+*   Migrar alguns módulos para Services separados (Workers AI, R2 Hooks etc.).
 
-Médio prazo
+## 11. Ambiente de Desenvolvimento
 
-Implementar refresh tokens.
+Para executar este projeto localmente, siga os passos abaixo:
 
-Criar auditoria on-chain opcional para módulos sensíveis.
+1.  **Clone o repositório:**
+    ```bash
+    git clone https://github.com/ASPPIBRA-DAO/CENTRAL-SYSTEM-API.git
+    cd CENTRAL-SYSTEM-API
+    ```
 
-Longo prazo
+2.  **Instale as dependências:**  
+    *Este projeto usa PNPM como gerenciador de pacotes.*
+    ```bash
+    pnpm install
+    ```
 
-Introduzir DID/VC (Identidade Descentralizada).
+3.  **Configure as variáveis de ambiente:**  
+    *Crie um arquivo `.dev.vars` na raiz do projeto e adicione os segredos necessários (tokens, connection strings do D1, etc.).*
 
-Migrar alguns módulos para Services separados (Workers AI, R2 Hooks etc.).
+4.  **Execute as migrações do banco de dados:**
+    ```bash
+    pnpm run drizzle:migrate
+    ```
+
+5.  **Inicie o servidor de desenvolvimento:**
+    ```bash
+    pnpm run dev
+    ```
