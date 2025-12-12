@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { sign, verify } from 'hono/jwt'; // ✅ Adicionado 'verify' para validar o token
 import { compare, hash } from 'bcryptjs';
-import { Database } from '../db';
-import { users } from '../db/schema';
+import { Database } from '../../db';
+import { users } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 
 // Definimos o que esperar do Contexto
