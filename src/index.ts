@@ -40,7 +40,10 @@ app.use('/*', cors({
 
 // --- 2. ROTA VISUAL (Dashboard) ---
 app.get('/', (c) => {
-  const domain = "https://api.asppibra.com";
+  const url = new URL(c.req.url);
+  const isDevelopment = url.hostname.includes('localhost') || url.hostname.includes('127.0.0.1');
+  const domain = isDevelopment ? url.origin : "https://api.asppibra.com";
+  
   const dashboardData = {
     version: "1.0.6",
     service: "Core API",
