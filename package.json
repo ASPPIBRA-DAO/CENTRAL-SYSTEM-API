@@ -1,0 +1,31 @@
+{
+	"name": "gov-system-backend",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"test": "vitest",
+		"dev": "wrangler dev",
+		"build:seo": "node scripts/build-seo.mjs",
+		"deploy": "pnpm run build:seo && wrangler deploy",
+		"cf-typegen": "wrangler types"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.8.19",
+		"@types/jsonwebtoken": "^9.0.10",
+		"typescript": "^5.5.2",
+		"vitest": "~3.2.0",
+		"wrangler": "^4.52.1"
+	},
+	"dependencies": {
+		"@aws-sdk/client-s3": "^3.946.0",
+		"@hono/zod-validator": "^0.7.5",
+		"@types/bcryptjs": "^2.4.6",
+		"bcryptjs": "^3.0.3",
+		"dotenv": "^17.2.3",
+		"drizzle-kit": "^0.31.8",
+		"drizzle-orm": "^0.44.7",
+		"hono": "^4.10.7",
+		"jsonwebtoken": "^9.0.3",
+		"zod": "^4.1.13"
+	}
+}

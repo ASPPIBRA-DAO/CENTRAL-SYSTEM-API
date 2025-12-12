@@ -1,0 +1,24 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+Allow: /site.webmanifest
+Allow: /favicon.ico
+
+# Security: Block ALL Internal API Routes
+Disallow: /monitoring
+Disallow: /health-db
+Disallow: /users/
+Disallow: /auth/
+Disallow: /post/
+# Wildcard safety net
+Disallow: /api/*
+
+# System Files & Config
+Disallow: /wrangler.toml
+Disallow: /wrangler.jsonc
+Disallow: /package.json
+Disallow: /node_modules/
+Disallow: *.ts
+
+# Sitemap Location
+Sitemap: https://api.asppibra.com/sitemap.xml
