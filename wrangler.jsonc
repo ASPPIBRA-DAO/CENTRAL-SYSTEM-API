@@ -4,6 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
   "account_id": "5d91807e648c183cb7833caa06dbcbdb",
+
   // ✅ DOMÍNIO PERSONALIZADO
   "routes": [
     {
@@ -11,26 +12,30 @@
       "custom_domain": true
     }
   ],
-  // 📂 ARQUIVOS ESTÁTICOS (Adicionado)
-  // Isso diz ao Wrangler para subir o conteúdo da pasta 'public'
-  // e disponibilizá-lo para o script através do binding 'ASSETS'
-  "assets": {
-    "directory": "./public",
-    "binding": "ASSETS"
+
+  // 📂 ARQUIVOS ESTÁTICOS (CORRIGIDO)
+  // Trocamos 'assets' por 'site' para gerar o __STATIC_CONTENT_MANIFEST
+  // necessário para o 'serveStatic' do Hono funcionar corretamente.
+  "site": {
+    "bucket": "./public"
   },
+
   // ⚙️ COMPATIBILIDADE E FLAGS
   "compatibility_flags": [
     "nodejs_compat"
   ],
+
   // 👁️ OBSERVABILIDADE
   "observability": {
     "enabled": true
   },
+
   // 🟢 VARIÁVEIS DE AMBIENTE
   "vars": {
     "CLOUDFLARE_ACCOUNT_ID": "5d91807e648c183cb7833caa06dbcbdb",
     "CLOUDFLARE_ZONE_ID": "60681ad827e114d9e51add1f079dd5d2"
   },
+
   // 📦 BANCO DE DADOS (D1)
   "d1_databases": [
     {
@@ -40,8 +45,8 @@
       "migrations_dir": "./migrations"
     }
   ],
-  // 🗂️ ARMAZENAMENTO (R2) - (RENOMEADO)
-  // Mudamos o binding de ASSETS para STORAGE para não conflitar com a pasta public
+
+  // 🗂️ ARMAZENAMENTO (R2)
   "r2_buckets": [
     {
       "binding": "STORAGE",
