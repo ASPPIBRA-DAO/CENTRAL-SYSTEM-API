@@ -1,24 +1,29 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
 Allow: /
+
+# ✅ Security: Explicitly Allow Static Assets
+Allow: /css/
+Allow: /js/
+Allow: /img/
+Allow: /icons/
 Allow: /site.webmanifest
 Allow: /favicon.ico
 
-# Security: Block ALL Internal API Routes
+# ⛔ Security: Block Internal API & System Routes
+Disallow: /api/
 Disallow: /monitoring
 Disallow: /health-db
 Disallow: /users/
 Disallow: /auth/
-Disallow: /post/
-# Wildcard safety net
-Disallow: /api/*
 
-# System Files & Config
+# ⛔ Block System Files
 Disallow: /wrangler.toml
 Disallow: /wrangler.jsonc
 Disallow: /package.json
 Disallow: /node_modules/
 Disallow: *.ts
+Disallow: *.map
 
 # Sitemap Location
 Sitemap: https://api.asppibra.com/sitemap.xml
