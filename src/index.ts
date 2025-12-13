@@ -29,7 +29,7 @@ type AppType = {
 const app = new Hono<AppType>();
 
 // =================================================================
-// 1. MIDDLEWARES GLOBAIS (CORS & DB) - Executam primeiro
+// 1. MIDDLEWARES GLOBAIS
 // =================================================================
 app.use('/*', cors({
   origin: (origin) => {
@@ -59,14 +59,10 @@ app.use(async (c, next) => {
 });
 
 // =================================================================
-// 2. ROTA PRINCIPAL (DASHBOARD) - PRIORIDADE MÁXIMA
+// 2. ROTA PRINCIPAL (DASHBOARD) - PRIORIDADE 1
 // =================================================================
 app.get('/', (c) => {
-  // [CORREÇÃO CRÍTICA]: Adicionamos 'http://localhost' como base.
-  // Isso impede o erro "Invalid URL string" quando rodamos localmente.
-  // Em produção, se a URL já for absoluta, esse segundo parâmetro é ignorado.
   const url = new URL(c.req.url, 'http://localhost');
-  
   const isLocal = url.hostname.includes('localhost') || url.hostname.includes('127.0.0.1');
   const domain = isLocal ? url.origin : "https://api.asppibra.com";
   const imageUrl = `${domain}/img/social-preview.png`;
@@ -80,14 +76,14 @@ app.get('/', (c) => {
   }));
 });
 
-// Redirecionamento de monitoramento
 app.get('/monitoring', (c) => c.redirect('/api/health/analytics'));
 
 // =================================================================
-// 3. ARQUIVOS ESTÁTICOS (CSS, JS, IMAGENS)
+// 3. ARQUIVOS ESTÁTICOS - PRIORIDADE 2
 // =================================================================
-// root: '' corrige o erro do "ponto" no Wrangler
-app.use('/*', serveStatic({ root: '', manifest }));
+// [CORREÇÃO]: root: './' é necessário para a Cloudflare encontrar os arquivos reais.
+// Como mudamos a ordem das rotas (Dashboard vem antes), isso não deve quebrar o local.
+app.use('/*', serveStatic({ root: './', manifest }));
 
 // =================================================================
 // 4. API & ROTAS MODULARES
@@ -102,7 +98,7 @@ app.route('/api/ipfs', ipfsRouter);
 app.route('/api/webhooks', webhooksRouter);
 
 // =================================================================
-// 5. TRATAMENTO DE ERROS
+// 5. ERROS
 // =================================================================
 app.notFound((c) => c.json({ success: false, message: 'Rota não encontrada (404)' }, 404));
 app.onError((err, c) => {
