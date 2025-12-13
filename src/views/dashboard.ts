@@ -19,6 +19,11 @@ export const DashboardTemplate = (props: DashboardProps) => html`
     <meta name="description" content="Real-time telemetry and observability of ASPPIBRA DAO.">
     
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     
@@ -42,7 +47,7 @@ export const DashboardTemplate = (props: DashboardProps) => html`
         <div class="header-brand">
           <div class="logo-wrapper">
             <div class="logo-glow"></div>
-            <img src="/android-chrome-192x192.png" alt="ASPPIBRA" class="header-logo" onerror="this.style.display='none'">
+            <img src="/icons/android-chrome-192x192.png" alt="ASPPIBRA" class="header-logo" onerror="this.style.display='none'">
           </div>
           <div class="header-text-col">
             <h1 class="header-title">ASPPIBRA DAO</h1>            
@@ -77,7 +82,7 @@ export const DashboardTemplate = (props: DashboardProps) => html`
                  <span style="font-family: 'JetBrains Mono'; font-size: 0.75rem; color: var(--success-color); letter-spacing: 1px; font-weight: 700;">LIVE MARKET</span>
               </div>
               
-              <h2 style="font-size: 2rem; margin: 0; line-height: 1.1;">ASPPIBRA <span style="color: var(--text-highlight);">($ASPPBR)</span></h2>
+              <h2 style="font-size: 2rem; margin: 0; line-height: 1.1;">ASPPIBRA <span style="color: var(--text-highlight);">$ASPPBR</span></h2>
               <p style="color: var(--text-muted); margin-top: 0.5rem; font-size: 0.95rem;">Official Governance & Utility Token.</p>
 
               <a href="https://app.uniswap.org/swap?chain=bnb&outputCurrency=0x0697AB2B003FD2Cbaea2dF1ef9b404E45bE59d4C" target="_blank" class="buy-btn">
@@ -146,7 +151,7 @@ export const DashboardTemplate = (props: DashboardProps) => html`
             <div class="governance-card glass-panel">
               <div class="logo-container">
                   <div class="logo-ring"></div>
-                  <img src="/android-chrome-192x192.png" alt="Logo" class="logo-img" onerror="this.style.display='none'">
+                  <img src="/icons/android-chrome-192x192.png" alt="Logo" class="logo-img" onerror="this.style.display='none'">
               </div>
               <h2 style="margin: 0; font-size: 1.4rem; font-weight: 700; color: var(--text-highlight);">Governance System</h2>
               <p style="color: var(--text-muted); margin-top: 0.5rem; font-size: 0.9rem;">API Backend & DAO Services</p>

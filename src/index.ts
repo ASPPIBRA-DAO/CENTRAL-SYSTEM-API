@@ -66,7 +66,7 @@ app.get('/', (c) => {
   const domain = isLocal ? url.origin : "https://api.asppibra.com";
   
   // URL absoluta garantida
-  const imageUrl = `${domain}/social-preview.png`;
+  const imageUrl = `${domain}/img/social-preview.png`;
 
   return c.html(DashboardTemplate({
     version: "1.1.0",
