@@ -10,34 +10,71 @@ interface DashboardProps {
 
 export const DashboardTemplate = (props: DashboardProps) => html`
   <!DOCTYPE html>
-  <html lang="en">
+  <html lang="en" itemscope itemtype="http://schema.org/WebPage">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="index, follow, max-image-preview:large">
     
-    <title>ASPPIBRA | Network Status</title>
-    <meta name="description" content="Real-time telemetry and observability of ASPPIBRA DAO.">
+    <title>ASPPIBRA DAO | Real-World Asset (RWA) Governance Protocol</title>
+    <meta name="title" content="ASPPIBRA DAO | Real-World Asset (RWA) Governance Protocol">
+    <meta name="description" content="Official dashboard for ASPPIBRA DAO. Monitor real-time $ASPPBR token price, agricultural asset treasury, governance voting, and decentralized network telemetry on BSC.">
+    <meta name="keywords" content="ASPPIBRA, DAO, RWA, Real World Assets, Tokenization, Agro DeFi, BSC, Governance, $ASPPBR, Web3, Agriculture Blockchain, Brazil Crypto">
+    <meta name="author" content="ASPPIBRA Foundation">
+    <link rel="canonical" href="${props.domain}">
     
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png">
     <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#020617">
     
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     
     <meta property="og:type" content="website">
     <meta property="og:url" content="${props.domain}">
-    <meta property="og:title" content="ASPPIBRA Protocol | Network Health & Nodes">
-    <meta property="og:description" content="⚡ Decentralized Infrastructure Operational. Real-time telemetry of global edge nodes, protocol latency, and Ledger integrity.">
+    <meta property="og:title" content="ASPPIBRA Protocol | RWA Token & Network Status">
+    <meta property="og:description" content="⚡ Live Market: $ASPPBR Token Price, Liquidity & Governance metrics. The first decentralized protocol bridging Brazilian Agriculture with Web3.">
     <meta property="og:image" content="${props.imageUrl}">
+    <meta property="og:site_name" content="ASPPIBRA DAO">
+    <meta property="og:locale" content="en_US">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content="${props.domain}">
-    <meta name="twitter:title" content="ASPPIBRA Protocol Status">
-    <meta name="twitter:description" content="⚡ Real-time Telemetry: Global Nodes, Latency & D1 Ledger.">
+    <meta name="twitter:title" content="$ASPPBR Live Price & DAO Metrics">
+    <meta name="twitter:description" content="Track ASPPIBRA's Real-World Asset treasury and network health in real-time. Governance for the future of agriculture.">
     <meta name="twitter:image" content="${props.imageUrl}">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FinanceApplication",
+      "name": "ASPPIBRA DAO Dashboard",
+      "url": "${props.domain}",
+      "description": "Decentralized application for monitoring ASPPIBRA DAO governance token ($ASPPBR) and network telemetry.",
+      "applicationCategory": "DeFi",
+      "operatingSystem": "Any",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "organization": {
+        "@type": "Organization",
+        "name": "ASPPIBRA DAO",
+        "url": "${props.domain}",
+        "logo": "${props.domain}/icons/android-chrome-512x512.png",
+        "sameAs": [
+          "https://twitter.com/asppibra",
+          "https://github.com/asppibra"
+        ]
+      }
+    }
+    </script>
   </head>
   <body class="theme-dark"> 
     <div class="bg-grid"></div>
