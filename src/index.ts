@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serveStatic } from 'hono/cloudflare-workers';
-// [NOVO] Importação do Manifesto (Módulo Virtual do Cloudflare)
 import manifest from '__STATIC_CONTENT_MANIFEST'; 
 import { Bindings } from './types/bindings';
 import { createDb, Database } from './db';
@@ -29,7 +28,9 @@ type AppType = {
 
 const app = new Hono<AppType>();
 
-// 1. Configuração de CORS
+// =================================================================
+// 1. MIDDLEWARES GLOBAIS (CORS & DB) - Executam primeiro
+// =================================================================
 app.use('/*', cors({
   origin: (origin) => {
     const allowedOrigins = [
@@ -47,11 +48,6 @@ app.use('/*', cors({
   credentials: true,
 }));
 
-// 2. Middleware de Arquivos Estáticos (CORRIGIDO)
-// Passamos o 'manifest' para que o Worker saiba mapear os arquivos
-app.use('/*', serveStatic({ root: './', manifest }));
-
-// 3. Middleware de Banco de Dados
 app.use(async (c, next) => {
   try {
     const db = createDb(c.env.DB);
@@ -62,9 +58,15 @@ app.use(async (c, next) => {
   }
 });
 
-// 4. Dashboard (Rota Raiz)
+// =================================================================
+// 2. ROTA PRINCIPAL (DASHBOARD) - PRIORIDADE MÁXIMA
+// =================================================================
 app.get('/', (c) => {
-  const url = new URL(c.req.url);
+  // [CORREÇÃO CRÍTICA]: Adicionamos 'http://localhost' como base.
+  // Isso impede o erro "Invalid URL string" quando rodamos localmente.
+  // Em produção, se a URL já for absoluta, esse segundo parâmetro é ignorado.
+  const url = new URL(c.req.url, 'http://localhost');
+  
   const isLocal = url.hostname.includes('localhost') || url.hostname.includes('127.0.0.1');
   const domain = isLocal ? url.origin : "https://api.asppibra.com";
   const imageUrl = `${domain}/img/social-preview.png`;
@@ -78,9 +80,18 @@ app.get('/', (c) => {
   }));
 });
 
+// Redirecionamento de monitoramento
 app.get('/monitoring', (c) => c.redirect('/api/health/analytics'));
 
-// 5. ROTEAMENTO
+// =================================================================
+// 3. ARQUIVOS ESTÁTICOS (CSS, JS, IMAGENS)
+// =================================================================
+// root: '' corrige o erro do "ponto" no Wrangler
+app.use('/*', serveStatic({ root: '', manifest }));
+
+// =================================================================
+// 4. API & ROTAS MODULARES
+// =================================================================
 app.route('/api/auth', authRouter);
 app.route('/api/users', usersRouter);
 app.route('/api/health', healthRouter);
@@ -90,7 +101,9 @@ app.route('/api/payments', paymentsRouter);
 app.route('/api/ipfs', ipfsRouter);
 app.route('/api/webhooks', webhooksRouter);
 
-// 6. Erros
+// =================================================================
+// 5. TRATAMENTO DE ERROS
+// =================================================================
 app.notFound((c) => c.json({ success: false, message: 'Rota não encontrada (404)' }, 404));
 app.onError((err, c) => {
   console.error('🔥 Erro Interno:', err);
