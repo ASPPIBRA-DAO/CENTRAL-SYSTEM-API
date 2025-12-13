@@ -34,7 +34,7 @@
     --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5); 
     --card-blur: blur(20px); 
     
-    /* [NOVO] Variáveis Específicas de HEADER & FOOTER */
+    /* Variáveis Específicas de HEADER & FOOTER */
     --header-bg: rgba(2, 6, 23, 0.75);
     --header-border: rgba(255, 255, 255, 0.08);
     --header-text: #ffffff;
@@ -57,8 +57,8 @@
     --bg-card-border: 1px solid rgba(0, 0, 0, 0.05);
     --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); 
     --card-blur: blur(12px); 
-
-    /* [NOVO] Variáveis Específicas de HEADER & FOOTER (Vidro Claro) */
+  
+    /* Variáveis Específicas de HEADER & FOOTER (Vidro Claro) */
     --header-bg: rgba(255, 255, 255, 0.85); 
     --header-border: rgba(0, 0, 0, 0.06);   
     --header-text: #0f172a;                 
@@ -121,48 +121,42 @@
     transition: all 0.3s ease;
   }
   
-/* -----------------------------------------
-   HEADER STYLES (Containerized Fix)
-   ----------------------------------------- */
-
-header { 
-  /* Apenas estrutura visual externa (Vidro/Fundo) */
-  width: 100%;
-  height: 72px;
-  background: var(--header-bg); 
-  border-bottom: 1px solid var(--header-border);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+  /* -----------------------------------------
+     HEADER STYLES
+     ----------------------------------------- */
   
-  position: sticky; top: 0; z-index: 1000;
-  box-sizing: border-box;
-  transition: background 0.3s, border-color 0.3s;
+  header { 
+    width: 100%;
+    height: 72px;
+    background: var(--header-bg); 
+    border-bottom: 1px solid var(--header-border);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    position: sticky; top: 0; z-index: 1000;
+    box-sizing: border-box;
+    transition: background 0.3s, border-color 0.3s;
+    display: block; 
+    padding: 0; 
+  }
   
-  /* Removemos o flex daqui e passamos para o container */
-  display: block; 
-  padding: 0; 
-}
-
-/* NOVO CONTAINER (A Mágica acontece aqui) */
-.header-container {
-  max-width: 1200px; /* Mesma largura do Dashboard e Footer */
-  height: 100%;
-  margin: 0 auto;    /* Centraliza na tela */
-  padding: 0 24px;   /* Respiro lateral interno */
+  .header-container {
+    max-width: 1200px; 
+    height: 100%;
+    margin: 0 auto;    
+    padding: 0 24px;   
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
   
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-/* Left: Brand */
-.header-brand { 
-  display: flex; 
-  align-items: center; 
-  gap: 16px; 
-  min-width: max-content; 
-}
+  /* Left: Brand */
+  .header-brand { 
+    display: flex; 
+    align-items: center; 
+    gap: 16px; 
+    min-width: max-content; 
+  }
   
   .logo-wrapper {
     position: relative;
@@ -193,14 +187,6 @@ header {
     font-size: 1.1rem; font-weight: 700; 
     color: var(--header-text); 
     letter-spacing: -0.5px; margin: 0; line-height: 1.1;
-  }
-  
-  .header-subtitle { 
-    font-family: 'JetBrains Mono', monospace; 
-    font-size: 0.7rem; 
-    color: var(--primary-glow); 
-    opacity: 0.9; 
-    letter-spacing: 1px;
   }
   
   /* Right: Tools */
@@ -253,7 +239,7 @@ header {
      DASHBOARD CONTENT STYLES
      ----------------------------------------- */
   
-  /* Welcome Card */
+  /* Welcome Card (Market Banner) */
   .welcome-card { 
     padding: 3rem; margin-bottom: 2.5rem; position: relative; overflow: hidden; 
   }
@@ -338,12 +324,10 @@ header {
   .sys-row { display: flex; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.9rem; }
   .sys-row:last-child { border-bottom: none; }
   
-  /* -----------------------------------------
-     [CORREÇÃO AQUI] METRICS ROWS (3 CARDS FIX)
-     ----------------------------------------- */
+  /* Metrics Rows */
   .db-metrics-row { 
     display: grid; 
-    grid-template-columns: repeat(3, 1fr); /* FORÇA 3 COLUNAS IGUAIS */
+    grid-template-columns: repeat(3, 1fr); 
     gap: 16px; 
     width: 100%;
     margin-bottom: 16px;
@@ -351,7 +335,7 @@ header {
   
   .metric-card { 
     padding: 1.5rem; 
-    min-width: 0; /* Impede que o card "vaze" se o conteúdo for grande */
+    min-width: 0;
   }
   
   .metric-title { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; }
@@ -385,16 +369,14 @@ header {
   .country-code { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-muted); font-size: 0.8rem; }
   
   /* -----------------------------------------
-     FOOTER STYLES (Dynamic Theme Fix)
+     FOOTER STYLES
      ----------------------------------------- */
   
   footer {
     margin-top: auto;
     width: 100%;
-    
     background: var(--header-bg); 
     border-top: 1px solid var(--header-border);
-    
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     padding: 1.5rem 0;
@@ -416,7 +398,6 @@ header {
     gap: 20px;
   }
   
-  /* Footer Sections */
   .footer-brand { display: flex; flex-direction: column; gap: 4px; }
   .footer-brand strong { color: var(--text-main); font-weight: 600; }
   .footer-brand span { font-size: 0.75rem; opacity: 0.7; }
@@ -447,7 +428,6 @@ header {
      UTILITIES & ANIMATIONS
      ----------------------------------------- */
   
-  /* Animations */
   @keyframes rotate { 100% { transform: rotate(360deg); } }
   @keyframes pulse-green {
     0% { box-shadow: 0 0 0 0 rgba(0, 255, 157, 0.7); }
@@ -458,7 +438,6 @@ header {
   
   .loading { font-family: 'JetBrains Mono', monospace; animation: blink 1s infinite; color: var(--text-muted); }
   
-  /* Theme Toggle Button */
   #theme-toggle { 
     width: 40px; height: 40px;
     background: transparent; 
@@ -472,7 +451,6 @@ header {
   }
   #theme-toggle:hover { background: rgba(255,255,255,0.1); transform: rotate(15deg); }
   
-  /* Custom Scrollbar */
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-track { background: var(--bg-main); }
   ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
@@ -483,21 +461,73 @@ header {
      ----------------------------------------- */
   
   @media (max-width: 768px) {
-    /* [FIX] Corrigido o padding para o header-container */
     .header-container { padding: 0 16px; }
     
     .header-title { font-size: 1rem; }
     .header-subtitle { display: none; }
     .network-pill { padding: 6px; }
-    .network-text { display: none; } /* Show only dot on mobile */
+    .network-text { display: none; }
     .wallet-addr { font-size: 0.75rem; }
     
     .footer-container { flex-direction: column; text-align: center; }
     .footer-tech { text-align: center; align-items: center; }
     .footer-links { gap: 16px; font-size: 0.8rem; }
   
-    /* [NOVO] Faz os cards de métricas empilharem no celular (1 por linha) */
     .db-metrics-row { 
       grid-template-columns: 1fr; 
     }
+  }
+  
+  /* =========================================
+     DASHBOARD SPECIFIC STYLES (NEW)
+     ========================================= */
+  
+  /* Botão de Compra (Header/Banner) */
+  .buy-btn {
+    background: var(--text-highlight);
+    color: var(--bg-main);
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    margin-top: 1rem;
+    z-index: 10;
+    position: relative;
+  }
+  
+  .buy-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    filter: brightness(1.1);
+  }
+  
+  /* Dados Secundários do Banner (Liq + MCap) */
+  .market-stats {
+    font-size: 0.85rem; 
+    color: var(--text-muted); 
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 4px;
+  }
+  
+  .stat-val {
+    color: var(--text-highlight);
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  
+  .stat-sep {
+    opacity: 0.3;
+    font-size: 0.8rem;
   }

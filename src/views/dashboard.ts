@@ -22,54 +22,17 @@ export const DashboardTemplate = (props: DashboardProps) => html`
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
     
-    <style>
-      /* Estilo do Botão de Compra */
-      .buy-btn {
-        background: var(--text-highlight);
-        color: var(--bg-main);
-        border: none;
-        padding: 10px 24px;
-        border-radius: 8px;
-        font-family: 'JetBrains Mono', monospace;
-        font-weight: 700;
-        font-size: 0.9rem;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        text-decoration: none;
-        transition: all 0.2s ease;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        margin-top: 1rem;
-        z-index: 10;
-        position: relative;
-      }
-      .buy-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(0,0,0,0.3);
-        filter: brightness(1.1);
-      }
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="${props.domain}">
+    <meta property="og:title" content="ASPPIBRA Protocol | Network Health & Nodes">
+    <meta property="og:description" content="⚡ Decentralized Infrastructure Operational. Real-time telemetry of global edge nodes, protocol latency, and Ledger integrity.">
+    <meta property="og:image" content="${props.imageUrl}">
 
-      /* NOVO: Estilo para os dados secundários do banner (Liquidez + MCap) */
-      .market-stats {
-        font-size: 0.85rem; 
-        color: var(--text-muted); 
-        font-family: 'Inter', sans-serif;
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        margin-top: 4px;
-      }
-      .stat-val {
-        color: var(--text-highlight);
-        font-weight: 600;
-        font-family: 'JetBrains Mono', monospace;
-      }
-      .stat-sep {
-        opacity: 0.3;
-        font-size: 0.8rem;
-      }
-    </style>
+    <meta name="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="${props.domain}">
+    <meta name="twitter:title" content="ASPPIBRA Protocol Status">
+    <meta name="twitter:description" content="⚡ Real-time Telemetry: Global Nodes, Latency & D1 Ledger.">
+    <meta name="twitter:image" content="${props.imageUrl}">
   </head>
   <body class="theme-dark"> 
     <div class="bg-grid"></div>
@@ -256,192 +219,7 @@ export const DashboardTemplate = (props: DashboardProps) => html`
       </div>
     </footer>
 
-    <script>
-      const toggleButton = document.getElementById('theme-toggle');
-      const body = document.body;
-      function applyTheme(theme) { 
-        body.className = ''; body.classList.add('theme-' + theme); 
-        toggleButton.innerText = theme === 'dark' ? '☀️' : '🌙'; 
-        localStorage.setItem('theme', theme); 
-      }
-      function toggleTheme() { 
-        const currentTheme = body.classList.contains('theme-dark') ? 'dark' : 'light'; 
-        applyTheme(currentTheme === 'dark' ? 'light' : 'dark'); 
-      }
-      function initTheme() { 
-        const savedTheme = localStorage.getItem('theme'); 
-        if (savedTheme) applyTheme(savedTheme); else applyTheme('dark'); 
-      }
-      if(toggleButton) toggleButton.addEventListener('click', toggleTheme);
-      initTheme();
-
-      setInterval(() => {
-        const latency = Math.floor(Math.random() * (45 - 15 + 1) + 15);
-        const latElem = document.getElementById('footer-latency');
-        if(latElem) latElem.innerText = latency + 'ms';
-      }, 3000);
-
-      // --- LOGIC: MARKET BANNER ---
-      const sparklinePath = document.getElementById('sparkline-path');
-      const sparklineFill = document.getElementById('sparkline-fill');
-      const priceDisplay = document.getElementById('price-display');
-      const changeDisplay = document.getElementById('price-change');
-      const liqDisplay = document.getElementById('liquidity-display');
-      const mcapDisplay = document.getElementById('mcap-display');
-      const chartFillGradient = document.getElementById('chartFill');
-      
-      let chartData = []; 
-      const MAX_POINTS = 20;
-
-      // NOVO: Função para formatar números grandes (ex: $9.5M, $1.2k)
-      function formatCompact(num) {
-        return Intl.NumberFormat('en-US', {
-            notation: "compact",
-            maximumFractionDigits: 1
-        }).format(num);
-      }
-
-      async function fetchLivePrice() {
-        try {
-            const res = await fetch('/api/rwa/price');
-            const data = await res.json();
-            if(data.error) throw new Error(data.error);
-            return data; 
-        } catch (e) {
-            console.error("Price fetch error:", e);
-            return null; 
-        }
-      }
-
-      async function updateSparkline() {
-        if(!sparklinePath) return;
-
-        const data = await fetchLivePrice();
-        
-        const currentPrice = (data && data.price) ? data.price : (chartData.length > 0 ? chartData[chartData.length-1] : 0.45);
-        const change24h = (data && data.change24h) ? data.change24h : 0;
-        const liquidity = (data && data.liquidity) ? data.liquidity : 0;
-        const mcap = (data && data.marketCap) ? data.marketCap : 0;
-
-        chartData.push(currentPrice);
-        if(chartData.length > MAX_POINTS) chartData.shift(); 
-        if(chartData.length === 1) chartData = Array(MAX_POINTS).fill(currentPrice);
-
-        const isPositive = change24h >= 0;
-        const color = isPositive ? '#00ff9d' : '#ef4444'; 
-        
-        // 1. Preço
-        if(priceDisplay) priceDisplay.innerText = '$' + currentPrice.toFixed(4);
-        
-        // 2. Variação
-        if(changeDisplay) {
-            const sign = isPositive ? '▲ +' : '▼ ';
-            changeDisplay.innerText = sign + Math.abs(change24h).toFixed(2) + '% (24h)';
-            changeDisplay.style.color = color;
-            changeDisplay.style.background = isPositive ? 'rgba(0, 255, 157, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-        }
-
-        // 3. Liquidez e Market Cap (Atualizado)
-        if(liqDisplay) {
-           liqDisplay.innerHTML = 'Liq: <span class="stat-val">$' + formatCompact(liquidity) + '</span>';
-        }
-        if(mcapDisplay) {
-           mcapDisplay.innerHTML = 'MCap: <span class="stat-val">$' + formatCompact(mcap) + '</span>';
-        }
-
-        // 4. Gráfico e Cores
-        sparklinePath.setAttribute('stroke', color);
-        if(chartFillGradient) {
-            const stops = chartFillGradient.getElementsByTagName('stop');
-            if(stops.length >= 2) {
-                stops[0].setAttribute('stop-color', color);
-                stops[1].setAttribute('stop-color', color);
-            }
-        }
-
-        const min = Math.min(...chartData);
-        const max = Math.max(...chartData);
-        const range = (max - min) === 0 ? 0.0001 : (max - min); 
-        const points = chartData.map((val, i) => {
-          const x = (i / (chartData.length - 1)) * 100;
-          const y = 100 - ((val - min) / range) * 80 - 10; 
-          return x + ',' + y;
-        });
-        const lineD = 'M' + points.join(' L');
-        sparklinePath.setAttribute('d', lineD);
-        if(sparklineFill) {
-            sparklineFill.setAttribute('d', lineD + ' L100,120 L0,120 Z');
-        }
-      }
-
-      setInterval(updateSparkline, 10000); 
-      updateSparkline(); 
-
-      // --- METRICS ---
-      async function fetchMetrics() {
-        const lblTotalRequests = document.getElementById('lbl-total-requests');
-        const lblTotalBytes = document.getElementById('lbl-total-bytes');
-        const lblSummaryWrites = document.getElementById('lbl-summary-writes');
-        const lblReads = document.getElementById('lbl-reads');
-        const lblWrites = document.getElementById('lbl-writes');
-        const lblCacheRatio = document.getElementById('lbl-cache-ratio');
-        const listCountries = document.getElementById('list-countries');
-        const lblWorkload = document.getElementById('lbl-workload');
-        const barWorkload = document.getElementById('bar-workload');
-
-        try {
-          const response = await fetch('/monitoring');
-          const data = await response.json();
-          if (data.error) throw new Error(data.error);
-
-          lblTotalRequests.innerText = data.requests.toLocaleString();
-          
-          const bytes = data.bytes;
-          let byteStr = "0 B";
-          if (bytes > 1073741824) byteStr = (bytes / 1073741824).toFixed(2) + " GB";
-          else if (bytes > 1048576) byteStr = (bytes / 1048576).toFixed(2) + " MB";
-          else byteStr = (bytes / 1024).toFixed(0) + " KB";
-          lblTotalBytes.innerText = byteStr;
-          
-          if(data.cacheRatio) lblCacheRatio.innerText = data.cacheRatio + "%";
-          lblSummaryWrites.innerText = data.dbWrites.toLocaleString();
-          lblReads.innerText = data.dbReads.toLocaleString();
-          lblWrites.innerText = data.dbWrites.toLocaleString();
-
-          const maxVal = Math.max(data.dbReads, data.dbWrites, 100);
-          document.getElementById('bar-reads').style.width = Math.min(100, (data.dbReads / maxVal) * 100) + "%";
-          document.getElementById('bar-writes').style.width = Math.min(100, (data.dbWrites / maxVal) * 100) + "%";
-          if(barWorkload) barWorkload.style.width = Math.min(100, (data.dbWrites / maxVal) * 100) + "%";
-          if(lblWorkload) lblWorkload.innerText = "Low"; 
-
-          listCountries.innerHTML = ''; 
-          if(data.countries && data.countries.length > 0) {
-              data.countries.forEach(c => {
-                  const li = document.createElement('li');
-                  li.className = 'country-item';
-                  const code = c.code || 'UNK';
-                  const flagUrl = 'https://flagsapi.com/' + code + '/flat/32.png';
-                  const htmlContent = 
-                    '<div class="flag-wrapper">' +
-                      '<img src="' + flagUrl + '" style="width:24px; height:24px; object-fit:contain;" onerror="this.style.display=\\'none\\'">' +
-                      '<span class="country-code">' + code + '</span>' +
-                    '</div>' +
-                    '<span style="font-family:\\'JetBrains Mono\\', monospace; font-weight:700; color: var(--text-highlight);">' +
-                      c.count.toLocaleString() +
-                    '</span>';
-                  li.innerHTML = htmlContent;
-                  listCountries.appendChild(li);
-              });
-          } else {
-              listCountries.innerHTML = '<li class="country-item">No traffic data</li>';
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      fetchMetrics();
-      setInterval(fetchMetrics, 30000); 
-    </script>
+    <script src="/js/dashboard.js"></script>
   </body>
   </html>
 `;
