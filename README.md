@@ -1,6 +1,6 @@
 # 📘 DOCUMENTAÇÃO ARQUITETURAL – CENTRAL-SYSTEM-API
 
-## The Sovereign Nexus Architecture – ASPPIBRA DAO
+## The Fusion Chain Protocol Architecture – ASPPIBRA DAO
 **Versão:** 1.0  
 **Última atualização:** 12/12/2025
 

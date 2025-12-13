@@ -338,9 +338,22 @@ header {
   .sys-row { display: flex; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.9rem; }
   .sys-row:last-child { border-bottom: none; }
   
-  /* Metrics Rows */
-  .db-metrics-row { display: flex; gap: 24px; flex-wrap: wrap; }
-  .metric-card { flex: 1; padding: 1.5rem; min-width: 200px; }
+  /* -----------------------------------------
+     [CORREÇÃO AQUI] METRICS ROWS (3 CARDS FIX)
+     ----------------------------------------- */
+  .db-metrics-row { 
+    display: grid; 
+    grid-template-columns: repeat(3, 1fr); /* FORÇA 3 COLUNAS IGUAIS */
+    gap: 16px; 
+    width: 100%;
+    margin-bottom: 16px;
+  }
+  
+  .metric-card { 
+    padding: 1.5rem; 
+    min-width: 0; /* Impede que o card "vaze" se o conteúdo for grande */
+  }
+  
   .metric-title { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; }
   .metric-value { font-size: 1.8rem; font-weight: 700; color: var(--text-highlight); margin: 0; }
   .metric-bar { height: 4px; width: 100%; background: rgba(255,255,255,0.05); margin-top: 20px; border-radius: 2px; overflow: hidden; }
@@ -482,4 +495,9 @@ header {
     .footer-container { flex-direction: column; text-align: center; }
     .footer-tech { text-align: center; align-items: center; }
     .footer-links { gap: 16px; font-size: 0.8rem; }
+  
+    /* [NOVO] Faz os cards de métricas empilharem no celular (1 por linha) */
+    .db-metrics-row { 
+      grid-template-columns: 1fr; 
+    }
   }

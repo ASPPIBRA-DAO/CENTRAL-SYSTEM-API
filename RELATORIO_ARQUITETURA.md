@@ -1,10 +1,10 @@
 # 🕵️ RELATÓRIO DE AUDITORIA - CENTRAL-SYSTEM-API
-Data: 12/12/2025, 7:47:15 PM
+Data: 12/12/2025, 10:53:06 PM
 Diretório Raiz: /home/user/CENTRAL-SYSTEM-API
 
 ---
 
-## 1. 🌳 ESTRUTURA DE ARQUIVOS\n```text\n├── migrations/\n│   ├── meta/\n│   │   ├── _journal.json\n│   │   └── 0000_snapshot.json\n│   └── 0000_unique_red_hulk.sql\n├── public/\n│   ├── css/\n│   │   └── style.css\n│   ├── android-chrome-192x192.png\n│   ├── android-chrome-512x512.png\n│   ├── apple-touch-icon.png\n│   ├── favicon-16x16.png\n│   ├── favicon-32x32.png\n│   ├── favicon.ico\n│   ├── robots.txt\n│   ├── site.webmanifest\n│   ├── sitemap.xml\n│   └── social-preview.png\n├── scripts/\n│   └── build-seo.mjs\n├── src/\n│   ├── db/\n│   │   ├── index.ts\n│   │   └── schema.ts\n│   ├── middlewares/\n│   │   ├── auth-jwt.ts\n│   │   └── rate-limit.ts\n│   ├── routes/\n│   │   ├── api-modules/\n│   │   │   ├── agro.ts\n│   │   │   ├── auth.ts\n│   │   │   ├── health.ts\n│   │   │   ├── ipfs.ts\n│   │   │   ├── payments.ts\n│   │   │   ├── rwa.ts\n│   │   │   ├── users.ts\n│   │   │   └── webhooks.ts\n│   │   └── posts.ts\n│   ├── types/\n│   │   └── bindings.d.ts\n│   ├── utils/\n│   │   ├── auth-guard.ts\n│   │   └── response.ts\n│   ├── validators/\n│   │   └── users.ts\n│   ├── views/\n│   │   └── dashboard.ts\n│   └── index.ts\n├── test/\n│   ├── env.d.ts\n│   ├── index.spec.ts\n│   └── tsconfig.json\n├── .dev.vars\n├── .editorconfig\n├── .gitignore\n├── .prettierrc\n├── audit-project.js\n├── drizzle.config.ts\n├── package.json\n├── pnpm-lock.yaml\n├── README.md\n├── RELATORIO_ARQUITETURA.md\n├── tsconfig.json\n├── vitest.config.mts\n├── worker-configuration.d.ts\n└── wrangler.jsonc\n\n```\n\n## 2. ⚙️ CONFIGURAÇÕES CRÍTICAS\n\n### 📄 wrangler.jsonc\n```jsonc\n{
+## 1. 🌳 ESTRUTURA DE ARQUIVOS\n```text\n├── .idx/\n│   └── dev.nix\n├── migrations/\n│   ├── meta/\n│   │   ├── _journal.json\n│   │   └── 0000_snapshot.json\n│   └── 0000_unique_red_hulk.sql\n├── public/\n│   ├── css/\n│   │   └── style.css\n│   ├── android-chrome-192x192.png\n│   ├── android-chrome-512x512.png\n│   ├── apple-touch-icon.png\n│   ├── favicon-16x16.png\n│   ├── favicon-32x32.png\n│   ├── favicon.ico\n│   ├── robots.txt\n│   ├── site.webmanifest\n│   ├── sitemap.xml\n│   └── social-preview.png\n├── scripts/\n│   └── build-seo.mjs\n├── src/\n│   ├── db/\n│   │   ├── index.ts\n│   │   └── schema.ts\n│   ├── middlewares/\n│   │   ├── auth-jwt.ts\n│   │   └── rate-limit.ts\n│   ├── routes/\n│   │   ├── api-modules/\n│   │   │   ├── agro.ts\n│   │   │   ├── auth.ts\n│   │   │   ├── health.ts\n│   │   │   ├── ipfs.ts\n│   │   │   ├── payments.ts\n│   │   │   ├── rwa.ts\n│   │   │   ├── users.ts\n│   │   │   └── webhooks.ts\n│   │   └── posts.ts\n│   ├── types/\n│   │   └── bindings.d.ts\n│   ├── utils/\n│   │   ├── auth-guard.ts\n│   │   └── response.ts\n│   ├── validators/\n│   │   └── users.ts\n│   ├── views/\n│   │   └── dashboard.ts\n│   └── index.ts\n├── test/\n│   ├── env.d.ts\n│   ├── index.spec.ts\n│   └── tsconfig.json\n├── .dev.vars\n├── .editorconfig\n├── .gitignore\n├── .prettierrc\n├── audit-project.js\n├── drizzle.config.ts\n├── package.json\n├── pnpm-lock.yaml\n├── README.md\n├── tsconfig.json\n├── vitest.config.mts\n├── worker-configuration.d.ts\n└── wrangler.jsonc\n\n```\n\n## 2. ⚙️ CONFIGURAÇÕES CRÍTICAS\n\n### 📄 wrangler.jsonc\n```jsonc\n{
   // 🏷️ IDENTIFICAÇÃO DO PROJETO
   "name": "governance-system",
   "main": "src/index.ts",
@@ -56,35 +56,36 @@ Diretório Raiz: /home/user/CENTRAL-SYSTEM-API
     }
   ]
 }\n```\n\n### ❌ wrangler.toml (Não encontrado)\n\n### 📄 package.json\n```jsonc\n{
-	"name": "gov-system-backend",
-	"version": "0.0.0",
-	"private": true,
-	"scripts": {
-		"test": "vitest",
-		"dev": "wrangler dev",
-		"build:seo": "node scripts/build-seo.mjs",
-		"deploy": "pnpm run build:seo && wrangler deploy",
-		"cf-typegen": "wrangler types"
-	},
-	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.8.19",
-		"@types/jsonwebtoken": "^9.0.10",
-		"typescript": "^5.5.2",
-		"vitest": "~3.2.0",
-		"wrangler": "^4.52.1"
-	},
-	"dependencies": {
-		"@aws-sdk/client-s3": "^3.946.0",
-		"@hono/zod-validator": "^0.7.5",
-		"@types/bcryptjs": "^2.4.6",
-		"bcryptjs": "^3.0.3",
-		"dotenv": "^17.2.3",
-		"drizzle-kit": "^0.31.8",
-		"drizzle-orm": "^0.44.7",
-		"hono": "^4.10.7",
-		"jsonwebtoken": "^9.0.3",
-		"zod": "^4.1.13"
-	}
+    "name": "gov-system-backend",
+    "version": "0.0.0",
+    "private": true,
+    "scripts": {
+        "test": "vitest",
+        "dev": "wrangler dev",
+        "build": "pnpm run build:seo",
+        "build:seo": "node scripts/build-seo.mjs",
+        "deploy": "pnpm run build:seo && wrangler deploy",
+        "cf-typegen": "wrangler types"
+    },
+    "devDependencies": {
+        "@cloudflare/vitest-pool-workers": "^0.8.19",
+        "@types/jsonwebtoken": "^9.0.10",
+        "typescript": "^5.5.2",
+        "vitest": "~3.2.0",
+        "wrangler": "^4.52.1"
+    },
+    "dependencies": {
+        "@aws-sdk/client-s3": "^3.946.0",
+        "@hono/zod-validator": "^0.7.5",
+        "@types/bcryptjs": "^2.4.6",
+        "bcryptjs": "^3.0.3",
+        "dotenv": "^17.2.3",
+        "drizzle-kit": "^0.31.8",
+        "drizzle-orm": "^0.44.7",
+        "hono": "^4.10.7",
+        "jsonwebtoken": "^9.0.3",
+        "zod": "^4.1.13"
+    }
 }\n```\n\n### 📄 drizzle.config.ts\n```jsonc\nimport { defineConfig } from "drizzle-kit";
 
 export default defineConfig({

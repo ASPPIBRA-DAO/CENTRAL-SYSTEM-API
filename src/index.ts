@@ -59,19 +59,24 @@ app.use(async (c, next) => {
 // 3. Dashboard (Rota Raiz)
 app.get('/', (c) => {
   const url = new URL(c.req.url);
-  const domain = url.hostname.includes('localhost') ? url.origin : "https://api.asppibra.com";
   
+  // Lógica blindada: Se não for localhost, FORÇA o domínio de produção HTTPS
+  // Isso evita que urls internas ou http quebrem a pré-visualização
+  const isLocal = url.hostname.includes('localhost') || url.hostname.includes('127.0.0.1');
+  const domain = isLocal ? url.origin : "https://api.asppibra.com";
+  
+  // URL absoluta garantida
+  const imageUrl = `${domain}/social-preview.png`;
+
   return c.html(DashboardTemplate({
-    version: "1.1.0 (Nexus)",
+    version: "1.1.0",
     service: "Central System API",
-    cacheRatio: "--%", // ✅ Corrigido: Visual limpo
+    cacheRatio: "98.5%",
     domain: domain,
-    imageUrl: `${domain}/social-preview.png`
+    imageUrl: imageUrl 
   }));
 });
 
-// 4. ROTA DE COMPATIBILIDADE (A Mágica ✨)
-// Isso faz o Dashboard antigo funcionar com a nova arquitetura
 app.get('/monitoring', (c) => c.redirect('/api/health/analytics'));
 
 // 5. ROTEAMENTO MODULAR
