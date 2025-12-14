@@ -1,7 +1,23 @@
 /**
- * ASPPIBRA DAO - Dashboard Logic
- * Handles Theme, Real-time Pricing (DexScreener), and System Metrics.
+ * ASPPIBRA DAO - Dashboard Logic (v6.0 - Real Data & 6h Cache)
+ * Conecta dados reais da API Moralis com proteção de Cache de 6 horas.
  */
+
+// --- CONFIGURAÇÃO GLOBAL ---
+const CONFIG = {
+  TOKEN_SUPPLY: 21000000, 
+  API_DATA: '/api/rwa/token-data',       
+  API_HISTORY: '/api/rwa/token-history', 
+  METRICS_ENDPOINT: '/monitoring',
+  
+  // ⚡ MODO REAL ATIVADO (Simulação Desligada)
+  SIMULATE_HISTORY: false, 
+
+  // TEMPOS DE ATUALIZAÇÃO (Economia Máxima - Plano Free)
+  REFRESH_PRICE: 60000,       // 1 Minuto (Preço)
+  REFRESH_CHART: 21600000,    // 6 Horas (Gráfico Pesado)
+  REFRESH_METRICS: 60000      // 1 Minuto (Métricas)
+};
 
 // --- THEME LOGIC ---
 const toggleButton = document.getElementById('theme-toggle');
@@ -13,29 +29,18 @@ function applyTheme(theme) {
   if(toggleButton) toggleButton.innerText = theme === 'dark' ? '☀️' : '🌙'; 
   localStorage.setItem('theme', theme); 
 }
-
 function toggleTheme() { 
   const currentTheme = body.classList.contains('theme-dark') ? 'dark' : 'light'; 
   applyTheme(currentTheme === 'dark' ? 'light' : 'dark'); 
 }
-
 function initTheme() { 
   const savedTheme = localStorage.getItem('theme'); 
-  if (savedTheme) applyTheme(savedTheme); 
-  else applyTheme('dark'); 
+  if (savedTheme) applyTheme(savedTheme); else applyTheme('dark'); 
 }
-
 if(toggleButton) toggleButton.addEventListener('click', toggleTheme);
 initTheme();
 
-// --- LATENCY SIMULATOR (FOOTER) ---
-setInterval(() => {
-  const latency = Math.floor(Math.random() * (45 - 15 + 1) + 15);
-  const latElem = document.getElementById('footer-latency');
-  if(latElem) latElem.innerText = latency + 'ms';
-}, 3000);
-
-// --- MARKET BANNER LOGIC ---
+// --- ELEMENTOS DO DOM ---
 const sparklinePath = document.getElementById('sparkline-path');
 const sparklineFill = document.getElementById('sparkline-fill');
 const priceDisplay = document.getElementById('price-display');
@@ -43,165 +48,207 @@ const changeDisplay = document.getElementById('price-change');
 const liqDisplay = document.getElementById('liquidity-display');
 const mcapDisplay = document.getElementById('mcap-display');
 const chartFillGradient = document.getElementById('chartFill');
+const logoHeader = document.querySelector('.header-logo');
+const logoGovernance = document.querySelector('.logo-img');
 
-let chartData = []; 
-const MAX_POINTS = 20;
+// Variáveis Globais
+let globalHistoryData = [];
+let globalCurrentPrice = 0.45;
 
 function formatCompact(num) {
-  return Intl.NumberFormat('en-US', {
-      notation: "compact",
-      maximumFractionDigits: 1
-  }).format(num);
+  return new Intl.NumberFormat('en-US', { notation: "compact", maximumFractionDigits: 1 }).format(num);
 }
 
-async function fetchLivePrice() {
+// 1. ATUALIZAÇÃO DE PREÇO (REAL - 1 Minuto)
+async function updatePriceOnly() {
   try {
-      const res = await fetch('/api/rwa/price');
-      const data = await res.json();
-      if(data.error) throw new Error(data.error);
-      return data; 
-  } catch (e) {
-      console.error("Price fetch error:", e);
-      return null; 
-  }
-}
+      const res = await fetch(CONFIG.API_DATA);
+      const json = await res.json();
+      const data = json.success ? json.data : null;
 
-async function updateSparkline() {
-  if(!sparklinePath) return;
-
-  const data = await fetchLivePrice();
-  
-  const currentPrice = (data && data.price) ? data.price : (chartData.length > 0 ? chartData[chartData.length-1] : 0.45);
-  const change24h = (data && data.change24h) ? data.change24h : 0;
-  const liquidity = (data && data.liquidity) ? data.liquidity : 0;
-  const mcap = (data && data.marketCap) ? data.marketCap : 0;
-
-  chartData.push(currentPrice);
-  if(chartData.length > MAX_POINTS) chartData.shift(); 
-  if(chartData.length === 1) chartData = Array(MAX_POINTS).fill(currentPrice);
-
-  const isPositive = change24h >= 0;
-  const color = isPositive ? '#00ff9d' : '#ef4444'; 
-  
-  // Update DOM Elements
-  if(priceDisplay) priceDisplay.innerText = '$' + currentPrice.toFixed(4);
-  
-  if(changeDisplay) {
-      const sign = isPositive ? '▲ +' : '▼ ';
-      changeDisplay.innerText = sign + Math.abs(change24h).toFixed(2) + '% (24h)';
-      changeDisplay.style.color = color;
-      changeDisplay.style.background = isPositive ? 'rgba(0, 255, 157, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-  }
-
-  if(liqDisplay) {
-     liqDisplay.innerHTML = 'Liq: <span class="stat-val">$' + formatCompact(liquidity) + '</span>';
-  }
-  if(mcapDisplay) {
-     mcapDisplay.innerHTML = 'MCap: <span class="stat-val">$' + formatCompact(mcap) + '</span>';
-  }
-
-  // Update Chart Colors
-  sparklinePath.setAttribute('stroke', color);
-  if(chartFillGradient) {
-      const stops = chartFillGradient.getElementsByTagName('stop');
-      if(stops.length >= 2) {
-          stops[0].setAttribute('stop-color', color);
-          stops[1].setAttribute('stop-color', color);
+      if(data) {
+          globalCurrentPrice = parseFloat(data.usdPrice || 0);
+          renderPriceInfo(data, globalCurrentPrice);
+          
+          // Se já temos histórico carregado, redesenha conectando ao novo preço
+          if(globalHistoryData.length > 0) {
+              renderChart(globalHistoryData, globalCurrentPrice);
+          }
       }
-  }
-
-  // Draw SVG
-  const min = Math.min(...chartData);
-  const max = Math.max(...chartData);
-  const range = (max - min) === 0 ? 0.0001 : (max - min); 
-  const points = chartData.map((val, i) => {
-    const x = (i / (chartData.length - 1)) * 100;
-    const y = 100 - ((val - min) / range) * 80 - 10; 
-    return x + ',' + y;
-  });
-  
-  const lineD = 'M' + points.join(' L');
-  sparklinePath.setAttribute('d', lineD);
-  if(sparklineFill) {
-      sparklineFill.setAttribute('d', lineD + ' L100,120 L0,120 Z');
-  }
+  } catch (e) { console.error("Price Update Failed:", e); }
 }
 
-// Start Market Updates (10s)
-setInterval(updateSparkline, 10000); 
-updateSparkline(); 
+// 2. ATUALIZAÇÃO DE HISTÓRICO (REAL - 6 Horas)
+async function updateHistoryOnly() {
+  try {
+    const res = await fetch(CONFIG.API_HISTORY);
+    if(!res.ok) return; 
+    const json = await res.json();
+    const history = json.success ? json.data : [];
 
-// --- SYSTEM METRICS LOGIC ---
+    if(history && history.length > 0) {
+        // Extrai apenas o preço de fechamento (close) das velas
+        globalHistoryData = history.map(candle => parseFloat(candle.close));
+        renderChart(globalHistoryData, globalCurrentPrice);
+    }
+  } catch (e) { console.error("History Update Failed:", e); }
+}
+
+// Renderiza Informações de Texto
+function renderPriceInfo(data, price) {
+    let changeRaw = (data['24hrPercentChange']) ? data['24hrPercentChange'] : 0;
+    if(changeRaw === 'null') changeRaw = 0;
+    const change24h = parseFloat(changeRaw);
+    
+    const liquidity = parseFloat(data.pairTotalLiquidityUsd || 0); 
+    const mcap = price * CONFIG.TOKEN_SUPPLY;
+    const isPositive = change24h >= 0;
+    const color = isPositive ? '#00ff9d' : '#ef4444'; 
+
+    if(priceDisplay) {
+        priceDisplay.innerText = '$' + price.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+        priceDisplay.classList.remove('loading');
+    }
+    if(changeDisplay) {
+        changeDisplay.innerText = (isPositive ? '▲ ' : '▼ ') + Math.abs(change24h).toFixed(2) + '% (24h)';
+        changeDisplay.style.color = color;
+        changeDisplay.style.background = isPositive ? 'rgba(0, 255, 157, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+    }
+    if(liqDisplay) liqDisplay.innerHTML = 'Liq: <span class="stat-val">$' + formatCompact(liquidity) + '</span>';
+    if(mcapDisplay) mcapDisplay.innerHTML = 'MCap: <span class="stat-val">$' + formatCompact(mcap) + '</span>';
+
+    if (data.tokenLogo && data.tokenLogo !== "null") {
+        if(logoHeader) logoHeader.src = data.tokenLogo;
+        if(logoGovernance) logoGovernance.src = data.tokenLogo;
+    }
+}
+
+// Renderiza Gráfico SVG
+function renderChart(historyData, currentPrice) {
+    let chartData = [...historyData];
+    
+    // Fallback: se vazio, usa preço atual
+    if (chartData.length === 0) chartData = [currentPrice];
+    
+    // Conecta último ponto histórico ao preço em tempo real
+    const lastVal = chartData[chartData.length - 1];
+    if (lastVal !== currentPrice) chartData.push(currentPrice);
+    
+    // Limita a 1 ano (366 dias)
+    if(chartData.length > 366) chartData = chartData.slice(-366);
+
+    // Se só tiver 1 ponto, duplica para formar linha reta
+    if(chartData.length === 1) chartData.push(chartData[0]);
+
+    const min = Math.min(...chartData);
+    const max = Math.max(...chartData);
+    const range = (max - min) === 0 ? 0.00001 : (max - min); 
+    
+    const start = chartData[0];
+    const end = chartData[chartData.length-1];
+    const color = end >= start ? '#00ff9d' : '#ef4444';
+
+    if(sparklinePath) {
+        sparklinePath.setAttribute('stroke', color);
+        if(chartFillGradient) {
+            const stops = chartFillGradient.getElementsByTagName('stop');
+            if(stops.length >= 2) {
+                stops[0].setAttribute('stop-color', color);
+                stops[1].setAttribute('stop-color', color);
+            }
+        }
+
+        const points = chartData.map((val, i) => {
+          const x = (i / (chartData.length - 1)) * 100;
+          const normalizedVal = (val - min) / range;
+          const y = 95 - (normalizedVal * 80); // Margem de segurança de 80% da altura
+          return `${x},${y}`;
+        });
+        
+        const lineD = 'M' + points.join(' L');
+        sparklinePath.setAttribute('d', lineD);
+        if(sparklineFill) {
+            sparklineFill.setAttribute('d', lineD + ' L100,120 L0,120 Z');
+        }
+    }
+}
+
+// --- MÉTRICAS (Cloudflare) ---
 async function fetchMetrics() {
-  const lblTotalRequests = document.getElementById('lbl-total-requests');
-  const lblTotalBytes = document.getElementById('lbl-total-bytes');
-  const lblSummaryWrites = document.getElementById('lbl-summary-writes');
-  const lblReads = document.getElementById('lbl-reads');
-  const lblWrites = document.getElementById('lbl-writes');
-  const lblCacheRatio = document.getElementById('lbl-cache-ratio');
-  const listCountries = document.getElementById('list-countries');
-  const lblWorkload = document.getElementById('lbl-workload');
-  const barWorkload = document.getElementById('bar-workload');
+  const elements = {
+      req: document.getElementById('lbl-total-requests'),
+      bytes: document.getElementById('lbl-total-bytes'),
+      writes: document.getElementById('lbl-summary-writes'),
+      reads: document.getElementById('lbl-reads'),
+      dbWrites: document.getElementById('lbl-writes'),
+      cache: document.getElementById('lbl-cache-ratio'),
+      countries: document.getElementById('list-countries'),
+      workload: document.getElementById('lbl-workload'),
+      barWorkload: document.getElementById('bar-workload'),
+      barReads: document.getElementById('bar-reads'),
+      barWrites: document.getElementById('bar-writes')
+  };
 
   try {
-    const response = await fetch('/monitoring');
-    const data = await response.json();
-    if (data.error) throw new Error(data.error);
+    const response = await fetch(CONFIG.METRICS_ENDPOINT); 
+    if (!response.ok && response.status !== 302) {
+         // Fallback silencioso para API direta se necessário
+         const fallback = await fetch('/api/health/analytics');
+         if(fallback.ok) renderMetrics(await fallback.json());
+         return;
+    }
+    renderMetrics(await response.json());
+  } catch (e) {}
 
-    if(lblTotalRequests) lblTotalRequests.innerText = data.requests.toLocaleString();
+  function renderMetrics(data) {
+    if(data.error) return;
+    if(elements.req) elements.req.innerText = (data.requests || 0).toLocaleString();
     
-    const bytes = data.bytes;
-    let byteStr = "0 B";
-    if (bytes > 1073741824) byteStr = (bytes / 1073741824).toFixed(2) + " GB";
-    else if (bytes > 1048576) byteStr = (bytes / 1048576).toFixed(2) + " MB";
-    else byteStr = (bytes / 1024).toFixed(0) + " KB";
-    if(lblTotalBytes) lblTotalBytes.innerText = byteStr;
+    const bytes = data.bytes || 0;
+    let byteStr = bytes > 1073741824 ? (bytes / 1073741824).toFixed(2) + " GB" : (bytes / 1048576).toFixed(2) + " MB";
+    if(elements.bytes) elements.bytes.innerText = byteStr;
+    if(data.cacheRatio && elements.cache) elements.cache.innerText = data.cacheRatio + "%";
     
-    if(data.cacheRatio && lblCacheRatio) lblCacheRatio.innerText = data.cacheRatio + "%";
-    if(lblSummaryWrites) lblSummaryWrites.innerText = data.dbWrites.toLocaleString();
-    if(lblReads) lblReads.innerText = data.dbReads.toLocaleString();
-    if(lblWrites) lblWrites.innerText = data.dbWrites.toLocaleString();
+    const reads = data.dbReads || 0;
+    const writes = data.dbWrites || 0;
+    if(elements.writes) elements.writes.innerText = writes.toLocaleString();
+    if(elements.reads) elements.reads.innerText = reads.toLocaleString();
+    if(elements.dbWrites) elements.dbWrites.innerText = writes.toLocaleString();
 
-    const maxVal = Math.max(data.dbReads, data.dbWrites, 100);
-    const elBarReads = document.getElementById('bar-reads');
-    const elBarWrites = document.getElementById('bar-writes');
+    const maxVal = Math.max(reads, writes, 100); 
+    if(elements.barReads) elements.barReads.style.width = Math.min(100, (reads / maxVal) * 100) + "%";
+    if(elements.barWrites) elements.barWrites.style.width = Math.min(100, (writes / maxVal) * 100) + "%";
     
-    if(elBarReads) elBarReads.style.width = Math.min(100, (data.dbReads / maxVal) * 100) + "%";
-    if(elBarWrites) elBarWrites.style.width = Math.min(100, (data.dbWrites / maxVal) * 100) + "%";
-    
-    if(barWorkload) barWorkload.style.width = Math.min(100, (data.dbWrites / maxVal) * 100) + "%";
-    if(lblWorkload) lblWorkload.innerText = "Low"; 
-
-    if(listCountries) {
-        listCountries.innerHTML = ''; 
+    if(elements.countries) {
+        elements.countries.innerHTML = ''; 
         if(data.countries && data.countries.length > 0) {
-            data.countries.forEach(c => {
+            data.countries.slice(0, 5).forEach(c => {
                 const li = document.createElement('li');
                 li.className = 'country-item';
                 const code = c.code || 'UNK';
                 const flagUrl = 'https://flagsapi.com/' + code + '/flat/32.png';
-                
-                // Usando concatenação simples para evitar erro no template literal do HTML
-                const htmlContent = 
-                  '<div class="flag-wrapper">' +
-                    '<img src="' + flagUrl + '" style="width:24px; height:24px; object-fit:contain;" onerror="this.style.display=\'none\'">' +
-                    '<span class="country-code">' + code + '</span>' +
-                  '</div>' +
-                  '<span style="font-family:\'JetBrains Mono\', monospace; font-weight:700; color: var(--text-highlight);">' +
-                    c.count.toLocaleString() +
-                  '</span>';
-                li.innerHTML = htmlContent;
-                listCountries.appendChild(li);
+                li.innerHTML = `<div class="flag-wrapper"><img src="${flagUrl}" style="width:24px;" onerror="this.style.display='none'"><span>${code}</span></div><span>${c.count.toLocaleString()}</span>`;
+                elements.countries.appendChild(li);
             });
         } else {
-            listCountries.innerHTML = '<li class="country-item">No traffic data</li>';
+            elements.countries.innerHTML = '<li class="country-item">No data</li>';
         }
     }
-  } catch (e) {
-    console.error(e);
   }
 }
 
-// Start System Metrics (30s)
+// Inicialização
+updatePriceOnly();   
+updateHistoryOnly(); 
 fetchMetrics();
-setInterval(fetchMetrics, 30000);
+
+// Timers
+setInterval(updatePriceOnly, CONFIG.REFRESH_PRICE); 
+setInterval(updateHistoryOnly, CONFIG.REFRESH_CHART); 
+setInterval(fetchMetrics, CONFIG.REFRESH_METRICS);
+
+// Latência Fake (Efeito Visual)
+setInterval(() => {
+  const latElem = document.getElementById('footer-latency');
+  if(latElem) latElem.innerText = Math.floor(Math.random() * 30 + 15) + 'ms';
+}, 3000);

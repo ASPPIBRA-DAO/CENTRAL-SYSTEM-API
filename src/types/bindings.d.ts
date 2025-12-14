@@ -14,7 +14,10 @@ export type Bindings = {
 
   // 4. Variáveis de Ambiente e Segredos
   JWT_SECRET: string;
-  ZERO_EX_API_KEY: string; // ✅ ADICIONADO: Chave para consultar preço na 0x API
+  ZERO_EX_API_KEY: string; 
+  
+  // ✅ ADICIONADO: Chave para a API da Moralis (RWA/Token Data)
+  MORALIS_API_KEY: string; 
 
   // 5. Variáveis do Cloudflare Analytics
   CLOUDFLARE_ACCOUNT_ID: string;
