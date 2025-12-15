@@ -1,6 +1,7 @@
 /**
  * ASPPIBRA DAO - Dashboard Logic (v6.0 - Real Data & 6h Cache)
  * Conecta dados reais da API Moralis com proteção de Cache de 6 horas.
+ * Updated: Mobile Menu Support
  */
 
 // --- CONFIGURAÇÃO GLOBAL ---
@@ -39,6 +40,29 @@ function initTheme() {
 }
 if(toggleButton) toggleButton.addEventListener('click', toggleTheme);
 initTheme();
+
+// --- MOBILE MENU LOGIC (NOVO) ---
+document.addEventListener('DOMContentLoaded', () => {
+    const menuBtn = document.getElementById('mobile-menu-btn');
+    const navMenu = document.getElementById('nav-menu');
+
+    if(menuBtn && navMenu) {
+        // Abrir/Fechar ao clicar no botão
+        menuBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Evita que o clique feche imediatamente
+            menuBtn.classList.toggle('is-active');
+            navMenu.classList.toggle('nav-active');
+        });
+
+        // Fechar ao clicar fora do menu
+        document.addEventListener('click', (e) => {
+            if (!navMenu.contains(e.target) && !menuBtn.contains(e.target) && navMenu.classList.contains('nav-active')) {
+                menuBtn.classList.remove('is-active');
+                navMenu.classList.remove('nav-active');
+            }
+        });
+    }
+});
 
 // --- ELEMENTOS DO DOM ---
 const sparklinePath = document.getElementById('sparkline-path');

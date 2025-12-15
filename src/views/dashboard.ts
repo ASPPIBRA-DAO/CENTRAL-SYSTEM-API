@@ -33,6 +33,7 @@ export const DashboardTemplate = (props: DashboardProps) => html`
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="/css/style.css">
     
     <meta property="og:type" content="website">
@@ -81,6 +82,7 @@ export const DashboardTemplate = (props: DashboardProps) => html`
     
     <header>
       <div class="header-container">
+        
         <div class="header-brand">
           <div class="logo-wrapper">
             <div class="logo-glow"></div>
@@ -91,18 +93,28 @@ export const DashboardTemplate = (props: DashboardProps) => html`
           </div>
         </div>
 
-        <div class="header-tools">
+        <button class="menu-toggle" id="mobile-menu-btn" aria-label="Toggle Menu">
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+        </button>
+
+        <div class="header-tools" id="nav-menu">
           <div class="network-pill" title="Network Status: Operational">
             <div class="pulse-dot"></div>
             <span class="network-text">API Stats</span>
           </div>
+          
           <div class="divider"></div>
+          
           <button class="wallet-btn" title="Connected: 0x71...F4">
             <div class="identicon"></div>
             <span class="wallet-addr">0x71...F4</span>
           </button>
+          
           <button id="theme-toggle" title="Switch Theme">☀️</button>
         </div>
+
       </div>
     </header>
 

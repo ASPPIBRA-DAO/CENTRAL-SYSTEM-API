@@ -1,6 +1,7 @@
 /* =========================================
    ASPPIBRA DAO // CORE STYLE SYSTEM
    Theme: Web3 / Glassmorphism / Cyberpunk
+   Updated: With Mobile Hamburger Menu & Responsive V2
    ========================================= */
 
    :root {
@@ -69,6 +70,11 @@
   /* -----------------------------------------
      BASE SETTINGS & LAYOUT
      ----------------------------------------- */
+  
+  /* [NOVO] Global Reset para evitar quebras de layout */
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
   
   body { 
     font-family: 'Inter', sans-serif; 
@@ -456,30 +462,8 @@
   ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
   
-  /* -----------------------------------------
-     RESPONSIVE MEDIA QUERIES
-     ----------------------------------------- */
-  
-  @media (max-width: 768px) {
-    .header-container { padding: 0 16px; }
-    
-    .header-title { font-size: 1rem; }
-    .header-subtitle { display: none; }
-    .network-pill { padding: 6px; }
-    .network-text { display: none; }
-    .wallet-addr { font-size: 0.75rem; }
-    
-    .footer-container { flex-direction: column; text-align: center; }
-    .footer-tech { text-align: center; align-items: center; }
-    .footer-links { gap: 16px; font-size: 0.8rem; }
-  
-    .db-metrics-row { 
-      grid-template-columns: 1fr; 
-    }
-  }
-  
   /* =========================================
-     DASHBOARD SPECIFIC STYLES (NEW)
+     DASHBOARD SPECIFIC STYLES
      ========================================= */
   
   /* Botão de Compra (Header/Banner) */
@@ -530,4 +514,162 @@
   .stat-sep {
     opacity: 0.3;
     font-size: 0.8rem;
+  }
+  
+  /* =========================================
+     MOBILE MENU TOGGLE (HAMBURGER)
+     [NOVO] Estilos do botão
+     ========================================= */
+  .menu-toggle {
+    display: none; /* Escondido no Desktop */
+    flex-direction: column;
+    justify-content: space-between;
+    width: 30px;
+    height: 21px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    z-index: 1002; /* Acima de tudo */
+  }
+  
+  .menu-toggle .bar {
+    width: 100%;
+    height: 3px;
+    background-color: var(--text-main);
+    border-radius: 3px;
+    transition: all 0.3s ease-in-out;
+    box-shadow: 0 0 8px rgba(0, 242, 255, 0.2); /* Glow sutil */
+  }
+  
+  /* Animação para virar 'X' */
+  .menu-toggle.is-active .bar:nth-child(1) {
+    transform: translateY(9px) rotate(45deg);
+    background-color: var(--primary-glow);
+  }
+  
+  .menu-toggle.is-active .bar:nth-child(2) {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  
+  .menu-toggle.is-active .bar:nth-child(3) {
+    transform: translateY(-9px) rotate(-45deg);
+    background-color: var(--primary-glow);
+  }
+  
+  
+  /* =========================================
+     RESPONSIVE SYSTEM & MOBILE MENU V2.0
+     [ATUALIZADO] 3 Breakpoints completos
+     ========================================= */
+  
+  /* -----------------------------------------
+     1. TABLET & SMALL LAPTOPS (max-width: 1024px)
+     ----------------------------------------- */
+  @media (max-width: 1024px) {
+    .tech-dashboard {
+      flex-direction: column;
+    }
+  
+    .col-system, .col-infra {
+      width: 100%;
+      min-width: unset;
+    }
+    
+    /* Ajuste do Grid para Tablets */
+    .summary-grid {
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+  }
+  
+  /* -----------------------------------------
+     2. MOBILE STANDARD (max-width: 768px)
+     ----------------------------------------- */
+  @media (max-width: 768px) {
+    /* HEADER: Ativa o layout flexível */
+    .header-container {
+      padding: 0 20px;
+      position: relative;
+    }
+  
+    /* Exibe o botão Menu */
+    .menu-toggle {
+      display: flex;
+    }
+  
+    /* Transforma a barra de ferramentas (.header-tools) no Menu Dropdown */
+    .header-tools {
+      position: fixed;
+      top: 72px; /* Altura do header */
+      left: 0;
+      width: 100%;
+      height: auto;
+      background: rgba(2, 6, 23, 0.98); /* Fundo quase sólido */
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--primary-glow);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+      
+      padding: 2rem;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      
+      /* Estado inicial: Escondido (Slide Up) */
+      transform: translateY(-150%);
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 999;
+    }
+  
+    /* Estado Ativo (Classe adicionada via JS) */
+    .header-tools.nav-active {
+      transform: translateY(0);
+      opacity: 1;
+      visibility: visible;
+    }
+  
+    /* Elementos internos do menu mobile */
+    .divider { 
+      width: 100%; 
+      height: 1px; 
+      background: var(--header-border); 
+      margin: 10px 0;
+      opacity: 0.3;
+    }
+  
+    .network-text { display: inline-block; } /* Mostra texto no menu */
+    .wallet-btn { width: 100%; justify-content: center; padding: 12px; font-size: 1rem; }
+    
+    /* Ajustes gerais de layout */
+    .main-container { padding: 0; }
+    .welcome-card { padding: 2rem; }
+    
+    .footer-container { 
+      flex-direction: column; 
+      text-align: center; 
+      gap: 24px; 
+    }
+    
+    .footer-links, .footer-tech { justify-content: center; }
+  }
+  
+  /* -----------------------------------------
+     3. MOBILE SMALL (max-width: 480px)
+     ----------------------------------------- */
+  @media (max-width: 480px) {
+    main { padding: 16px 12px; }
+    
+    .header-title { font-size: 1rem; }
+    
+    .welcome-card h2 { font-size: 1.6rem; }
+    .value { font-size: 2.2rem; }
+    
+    /* Métricas em coluna única para legibilidade */
+    .db-metrics-row { grid-template-columns: 1fr; gap: 12px; }
+    
+    /* Ajuste no botão de menu */
+    .menu-toggle { transform: scale(0.9); }
   }
