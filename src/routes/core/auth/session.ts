@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { hash } from 'bcryptjs'; // Função para criptografar senha
 import { zValidator } from '@hono/zod-validator'; // Middleware que conecta Hono + Zod
-import { registerSchema } from '../../validators/users';
-import { users } from '../../db/schema';
-import { success, error } from '../../utils/response';
-import { Database } from '../../db';
+import { registerSchema } from '../../../validators/users';
+import { users } from '../../../db/schema';
+import { success, error } from '../../../utils/response';
+import { Database } from '../../../db';
 import { eq } from 'drizzle-orm';
 
 // Criando uma sub-aplicação Hono só para usuários

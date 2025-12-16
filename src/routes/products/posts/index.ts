@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { success } from '../utils/response';
-import { Database } from '../db';
+import { success } from '../../../utils/response';
+import { Database } from '../../../db';
 
 // Mock post data
 const mockPosts = [

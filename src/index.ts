@@ -1,21 +1,27 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serveStatic } from 'hono/cloudflare-workers';
-import manifest from '__STATIC_CONTENT_MANIFEST'; 
+import manifest from '__STATIC_CONTENT_MANIFEST';
 import { Bindings } from './types/bindings';
 import { createDb, Database } from './db';
 import { error } from './utils/response';
 import { DashboardTemplate } from './views/dashboard';
 
-// --- MÓDULOS ---
-import authRouter from './routes/api-modules/auth';
-import usersRouter from './routes/api-modules/users';
-import healthRouter from './routes/api-modules/health'; 
-import rwaRouter from './routes/api-modules/rwa';
-import agroRouter from './routes/api-modules/agro';
-import paymentsRouter from './routes/api-modules/payments';
-import ipfsRouter from './routes/api-modules/ipfs';
-import webhooksRouter from './routes/api-modules/webhooks';
+// --- CORE MODULES ---
+import authRouter from './routes/core/auth';
+import sessionRouter from './routes/core/auth/session';
+import healthRouter from './routes/core/health';
+import webhooksRouter from './routes/core/webhooks';
+
+// --- PLATFORM MODULES ---
+import paymentsRouter from './routes/platform/payments';
+import storageRouter from './routes/platform/storage';
+
+// --- PRODUCT MODULES ---
+import agroRouter from './routes/products/agro';
+import rwaRouter from './routes/products/rwa';
+import postsRouter from './routes/products/posts';
+
 
 type Variables = {
   db: Database;
@@ -72,7 +78,7 @@ app.get('/', (c) => {
     service: "Central System API",
     cacheRatio: "98.5%",
     domain: domain,
-    imageUrl: imageUrl 
+    imageUrl: imageUrl
   }));
 });
 
@@ -88,14 +94,21 @@ app.use('/*', serveStatic({ root: './', manifest }));
 // =================================================================
 // 4. API & ROTAS MODULARES
 // =================================================================
+// --- CORE ---
 app.route('/api/auth', authRouter);
-app.route('/api/users', usersRouter);
+app.route('/api/auth', sessionRouter);
 app.route('/api/health', healthRouter);
-app.route('/api/rwa', rwaRouter);
-app.route('/api/agro', agroRouter);
-app.route('/api/payments', paymentsRouter);
-app.route('/api/ipfs', ipfsRouter);
 app.route('/api/webhooks', webhooksRouter);
+
+// --- PLATFORM ---
+app.route('/api/payments', paymentsRouter);
+app.route('/api/storage', storageRouter);
+
+// --- PRODUCTS ---
+app.route('/api/agro', agroRouter);
+app.route('/api/rwa', rwaRouter);
+app.route('/api/posts', postsRouter);
+
 
 // =================================================================
 // 5. ERROS
