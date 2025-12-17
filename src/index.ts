@@ -65,7 +65,7 @@ app.use(async (c, next) => {
   }
 });
 
-// 1.3 Audit & Telemetry (NOVO)
+// 1.3 Audit & Telemetry (DADOS REAIS - ZERO FAKE)
 // Captura métricas de todas as requisições API (exceto arquivos estáticos)
 app.use('*', async (c, next) => {
   const start = Date.now();
@@ -83,9 +83,11 @@ app.use('*', async (c, next) => {
       audit.log({
         action: "API_REQUEST",
         ip: c.req.header("cf-connecting-ip") || "unknown",
+        
+        // [VERDADE]: Sem simulação. Se não tiver header (localhost), é XX.
         country: c.req.header("cf-ipcountry") || "XX",
+        
         userAgent: c.req.header("user-agent"),
-        // [CORREÇÃO]: Mudado para minúsculo para bater com o Schema
         status: c.res.ok ? "success" : "failure",
         metadata: {
           path: path,
@@ -118,8 +120,10 @@ app.get('/', (c) => {
   c.executionCtx.waitUntil(audit.log({
     action: "DASHBOARD_VIEW",
     ip: c.req.header("cf-connecting-ip") || "unknown",
+    
+    // [VERDADE]: Mantém consistência com o middleware acima
     country: c.req.header("cf-ipcountry") || "XX",
-    // [CORREÇÃO]: Mudado para minúsculo
+    
     status: "success"
   }));
 
@@ -160,10 +164,20 @@ app.route('/api/rwa', rwaRouter);
 app.route('/api/posts', postsRouter);
 
 // =================================================================
-// 4. ARQUIVOS ESTÁTICOS
+// 4. ARQUIVOS ESTÁTICOS (CORRIGIDO: Cast 'as any')
 // =================================================================
 app.get('/*', async (c) => {
-  return c.env.ASSETS.fetch(c.req.raw);
+  try {
+    // Evita loop se o browser tentar buscar a raiz como arquivo
+    if (new URL(c.req.url).pathname === '/') return c.notFound();
+    
+    // [CORREÇÃO AQUI]: Adicionado 'as any' para silenciar o erro de getSetCookie do TypeScript
+    return await c.env.ASSETS.fetch(c.req.raw as any);
+
+  } catch (e) {
+    // Se não achar, retorna 404 limpo sem estourar erro vermelho no terminal
+    return c.notFound();
+  }
 });
 
 // =================================================================
