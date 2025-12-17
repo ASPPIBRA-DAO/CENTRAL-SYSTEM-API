@@ -1,253 +1,250 @@
-# 📘 DOCUMENTAÇÃO ARQUITETURAL – CENTRAL-SYSTEM-API
+# Governance System 🚀
 
-## The Fusion Chain Protocol Architecture – ASPPIBRA DAO
-**Versão:** 1.0  
-**Última atualização:** 12/12/2025
+O Governance System é uma plataforma de governança institucional e identidade digital, projetada para operar em cenários de DAO, Web3 e RWA (Real World Assets).
 
+Mais do que um sistema de votação ou gestão administrativa, este projeto implementa um Identity Provider (IdP) soberano, com segurança de nível financeiro, compliance jurídico e rastreabilidade completa.
+
+## 🧭 Visão Geral
+
+O sistema foi concebido para:
+
+- 🏛️ Sustentar governança descentralizada (DAO)
+- 🌱 Operar em contextos de cooperativismo
+- 🧾 Atender requisitos de compliance e auditoria
+- 🦊 Integrar identidade Web3 (SIWE) com Web2 tradicional
+- 🛡️ Garantir segurança bancária (MFA, sessões rastreáveis)
+
+Toda a arquitetura roda no edge da Cloudflare, priorizando latência mínima, escalabilidade global e simplicidade operacional.
+
+## 🏗️ Arquitetura
+
+O Governance System utiliza uma arquitetura Jamstack + Edge Computing, com separação clara entre interface, identidade, governança e persistência de dados.
+
+### Stack Tecnológica
+
+#### Front-end
+
+- SPA em React + TypeScript
+- Material-UI (MUI) para UI responsiva e acessível
+
+#### Edge & Backend
+
+- Cloudflare Pages para servir o front-end
+- Cloudflare Workers como API serverless
+- Cloudflare KV (Workers KV) para cache de ultra-baixa latência:
+  - Nonces de autenticação (SIWE)
+  - Sessões revogadas
+  - Preços e estados temporários de ativos (RWA)
+
+#### Identidade & Segurança (IdP)
+
+- Autenticação por email/senha
+- MFA / TOTP (Google Authenticator, Authy, etc.)
+- Web3 SIWE (Sign-In with Ethereum)
+- Sessões rastreáveis com fingerprint heurístico
+
+#### Persistência Híbrida (Web2 + Web3)
+
+- Cloudflare D1 (SQLite serverless): dados relacionais, perfis, sessões e logs
+- Cloudflare R2 (Object Storage): documentos KYC e arquivos privados
+- IPFS (InterPlanetary File System): metadados imutáveis de ativos RWA e propostas da DAO
+
+#### Auditoria
+
+- Logs forenses de todas as ações críticas
+- Trilhas auditáveis para compliance e disputas jurídicas
+
+## 🔐 Identidade como Núcleo do Sistema
+
+A identidade é o eixo central da arquitetura. Todas as ações — governança, votos, movimentações, permissões — partem de um usuário autenticado, auditável e com nível de garantia de autenticação (AAL) conhecido.
+
+O sistema suporta:
+
+- Contas tradicionais (email + senha)
+- Contas Web3 (carteiras Ethereum)
+- Contas híbridas (email + wallet)
+- Contas com múltiplas carteiras (1:N)
+
+## 🧮 Authentication Assurance Levels (AAL)
+
+O sistema adota níveis formais de garantia de autenticação, permitindo controle de risco e governança baseada em identidade:
+
+| Nível | Descrição | Requisitos |
+| :---- | :--- | :--- |
+| AAL1 | Identidade Básica | Email + senha verificada |
+| AAL2 | Identidade Forte | Email + senha + MFA/TOTP |
+| AAL3 | Identidade Institucional | MFA + Wallet vinculada + KYC aprovado |
+
+Cada ação sensível (voto, emissão de ativo, proposta, admin) exige um AAL mínimo configurável.
+
+## 🔑 Fluxo de Criação de Credencial
+
+1.  **Registro Inicial**
+    - Usuário informa email e senha
+    - Senha é armazenada usando hash forte (Argon2id)
+2.  **Verificação de Email**
+    - Token de verificação com expiração curta
+3.  **Criação de Sessão**
+    - JWT de curta duração
+    - Refresh token com rotação obrigatória (one-time-use)
+4.  **Ativação de MFA (Opcional / Obrigatório por Perfil)**
+    - Geração de segredo TOTP
+    - Validação dupla antes de ativação
+5.  **Vinculação Web3 (Opcional)**
+    - Geração de nonce via Workers KV
+    - Assinatura SIWE pela wallet
+    - Persistência do vínculo User ↔ Wallet
+6.  **Evolução para AAL3 (KYC)**
+    - Upload de documentos (R2)
+    - Aprovação manual ou automatizada
+    - Elevação do nível de garantia
+
+## 🔄 Diagrama de Fluxo da Arquitetura
+
+```mermaid
+graph TD
+subgraph "Navegador do Usuário"
+A[React App]
+W[Wallet Web3]
+end
+
+
+subgraph "Cloudflare Edge"
+B(Cloudflare Pages)
+C(API Worker)
+K[(Workers KV)]
+end
+
+
+subgraph "Camada de Identidade (IdP)"
+C1[Auth Core]
+C2[MFA / TOTP]
+C3[Web3 SIWE]
+C4[Compliance & KYC]
+end
+
+
+subgraph "Persistência Híbrida"
+D[(Banco de Dados D1)]
+E[(Storage R2)]
+I((IPFS Network))
+F[(Audit Logs)]
+end
+
+
+%% Fluxo principal
+B -- Serve o App --> A
+A -- Requisições HTTP --> C
+C -- Checa Sessão / Nonce --> K
+C --> C1
+
+
+%% Auth & Segurança
+C1 -- Sessões / Usuários --> D
+C1 -- Eventos --> F
+
+
+%% MFA
+C1 --> C2
+C2 -- Validar Código --> D
+C2 -- Eventos --> F
+
+
+%% Web3
+W -- Assinatura --> C3
+C3 -- Valida Nonce --> K
+C3 -- Wallets / Users --> D
+C3 -- Eventos --> F
+
+
+%% Compliance
+C1 --> C4
+C4 -- Status KYC / Termos --> D
+C4 -- Upload Docs --> E
+C4 -- Eventos --> F
+
+
+%% RWA & DAO (Imutabilidade)
+C -- Metadados RWA / Propostas --> I
+I -. CID .-> D
+
+```
 ---
 
-## 1. Visão Geral
+## 💾 Estratégia de Dados: Híbrida e Soberana
 
-O `CENTRAL-SYSTEM-API` atua como a autoridade central ("Mothership") da arquitetura Hub-and-Spoke da ASPPIBRA DAO.
-Ele funciona como:
+O sistema adota uma estratégia que equilibra privacidade, performance e transparência pública.
 
-*   API Gateway
-*   Núcleo de Identidade e Governança
-*   Orquestrador de Microsserviços Web2 / Web3
-*   Camada de Segurança e Compliance
-*   Ponto Único de Observabilidade e Monitoramento
+### 🔒 Dados Sensíveis (Privados)
 
-A solução está implementada sobre **Cloudflare Workers**, adotando:
+- Emails, senhas, documentos pessoais e status KYC
+- **Tecnologia**: Cloudflare D1 + R2
+- Criptografados e protegidos por controle de acesso
 
-*   **Hono.js** como framework HTTP
-*   **Cloudflare D1** como banco relacional
-*   **Cloudflare R2** para storage
-*   **Drizzle ORM**
-*   **Zod** para validação
-*   **JWT** para identidade
-*   **IPFS/Pinata** para armazenamento descentralizado
-*   **RWA/Agro Modules** para lógica blockchain
+### ⚡ Dados de Performance (Edge Cache)
 
-## 2. Estrutura de Diretórios (Formalizada)
+- Sessões revogadas
+- Nonces de login Web3
+- Cotações e estados temporários de ativos
+- **Tecnologia**: Cloudflare Workers KV
+
+### 🌐 Dados Públicos e Imutáveis
+
+- Metadados de ativos RWA
+- Propostas e resultados finais de votações
+- **Tecnologia**: IPFS
+- Cada publicação no IPFS gera um CID (Content Identifier) que prova matematicamente a imutabilidade do conteúdo.
+
+## 🛡️ Modelo de Ameaças (STRIDE) — Auth Core
+
+| Categoria | Mitigação |
+| :--- | :--- |
+| **S**poofing | MFA, SIWE, verificação de email |
+| **T**ampering | IPFS (imutabilidade), hash criptográfico |
+| **R**epudiation | Logs forenses e trilhas auditáveis |
+| **I**nformation Disclosure| Criptografia, segregação de dados |
+| **D**enial of Service | Rate limiting, edge caching |
+| **E**levation of Privilege | AAL mínimo por ação, roles explícitos |
+
+## 📂 Estrutura de Diretórios (Resumo)
+
 ```
-central-system-api/
-├── .dev.vars                 # Secrets locais (não versionados)
-├── .gitignore
-├── package.json              # Dependências e scripts
-├── pnpm-lock.yaml
-├── wrangler.jsonc            # Configuração da infraestrutura Cloudflare
-├── drizzle.config.ts         # Configuração do Drizzle ORM
-├── migrations/               # Migrações do banco D1
-├── public/                   # Arquivos estáticos (dashboard, assets)
-├── test/                     # Testes unitários e de integração
-│   ├── auth.spec.ts
-│   └── users.spec.ts
-└── src/
-    ├── db/
-    │   ├── index.ts          # Instância do banco (Drizzle + D1)
-    │   └── schema.ts         # Definição das tabelas
-    │
-    ├── types/
-    │   └── bindings.d.ts     # Tipagem de c.env (bindings e secrets)
-    │
-    ├── utils/
-    │   ├── response.ts       # Formatação de respostas
-    │   └── auth-guard.ts     # Validação de autenticação
-    │
-    ├── validators/
-    │   └── users.ts          # Validação via Zod
-    │
-    ├── views/
-    │   └── dashboard.ts      # Dashboard administrativo
-    │
-    ├── middlewares/
-    │   ├── auth-jwt.ts       # Autenticação de rotas
-    │   └── rate-limit.ts     # Limitação de requisições
-    │
-    ├── routes/
-    │   └── api-modules/
-    │       ├── auth.ts       # Identidade
-    │       ├── users.ts      # Gerenciamento de usuários
-    │       ├── payments.ts   # Web2 – Pagamentos
-    │       ├── webhooks.ts   # Web2 – Webhooks financeiros
-    │       ├── rwa.ts        # Web3 – Lógica de Real World Assets
-    │       ├── agro.ts       # Web3 – Lógica AgroDAO
-    │       ├── ipfs.ts       # Armazenamento descentralizado (IPFS)
-    │       └── health.ts     # Monitoramento
-    │
-    └── index.ts              # Ponto de entrada do Worker
+src/
+├── db/
+│   └── schema.ts            # Users, Sessions, Wallets, Audit Logs
+├── routes/
+│   └── core/auth/
+│       ├── index.ts         # Login, Refresh, Logout
+│       ├── session.ts       # /me, Perfil
+│       ├── password.ts      # Recuperação de senha
+│       ├── mfa.ts           # MFA / TOTP
+│       ├── web3.ts          # SIWE & Wallets
+│       ├── compliance.ts    # Termos & KYC
+│       └── admin.ts         # Roles & Banimento
+├── services/
+│   └── audit.ts             # Logger global de auditoria
+└── utils/
+    └── auth-guard.ts        # Middleware de autenticação
 ```
 
-## 3. Objetivos Arquiteturais
-### 3.1 Principais Metas
-*   Centralizar segurança, autenticação e governança.
-*   Prover um único ponto de integração entre Web2, Web3 e infraestrutura DAO.
-*   Oferecer modularidade e escalabilidade via API Gateway.
-*   Reduzir acoplamento entre serviços.
-*   Garantir rastreabilidade para transparência DAO.
+## ⚙️ Setup Rápido
 
-### 3.2 Drivers Arquiteturais
-*   Operação distribuída em escala
-*   Confiabilidade e auditabilidade
-*   Baixo custo (Workers)
-*   Alta performance global
-*   Conformidade organizacional (DAO)
+### Pré-requisitos
 
-## 4. Componentes Principais
-#### 4.1 API Gateway
-*   Entrada única para todas as aplicações Web, Mobile, IoT e DApps.
-*   Gerencia rotas, versionamento e throttling.
+- Node.js v24+
+- pnpm v10+
+- Wrangler CLI
 
-#### 4.2 Módulo de Identidade (IdM)
-*   Emite e valida tokens JWT.
-*   Integra com biometria, wallets Web3 ou credenciais Web2.
-*   Suporte planejado para DID.
+### Variáveis de Ambiente (`.dev.vars`)
 
-#### 4.3 Orquestrador de Serviços
-*   Router baseado em Hono.
-*   Módulos independentes para auth, usuários, pagamentos, etc.
-*   Permite evolução incremental.
-
-#### 4.4 Persistência
-*   D1 + Drizzle ORM
-*   Migrações versionadas
-*   Operações atomicamente consistentes
-
-#### 4.5 Armazenamento Descentralizado
-*   IPFS via Pinata Proxy
-*   Assinatura de arquivos
-*   Verificação de CID
-
-#### 4.6 RWA & Agro Services (Blockchain Layer)
-*   Tokenização de ativos reais
-*   Registro de produção agroecológica
-*   Auditoria e rastreabilidade
-
-## 5. Diagrama C4 – Nível 1 (Contexto)
-```text
-                          +----------------------+
-                          |     Usuários         |
-                          |  Web / Mobile / IoT  |
-                          +----------+-----------+
-                                     |
-                                     | HTTPS Requests
-                                     |
-                        +------------v--------------+
-                        |   CENTRAL-SYSTEM-API      |
-                        |      (API Gateway)        |
-                        +----+------------+---------+
-                             |            |
-                             |            |
-          +------------------v--+     +---v--------------------+
-          | Serviços Internos   |     |    Sistemas Externos   |
-          | (Auth, Users, etc.) |     | (Pagamentos, IPFS etc.)|
-          +---------------------+     +-------------------------+
+```
+JWT_SECRET=super_secret_key
+REFRESH_TOKEN_SECRET=another_secret
+R2_BUCKET_NAME=governance-docs
 ```
 
-## 6. Diagrama C4 – Nível 2 (Containers)
-```text
-+---------------------------------------------------------------+
-|                  CENTRAL-SYSTEM-API (Worker)                  |
-|---------------------------------------------------------------|
-|  Hono Router                                                   |
-|  Middlewares: Auth, Rate-Limit                                |
-|  Modules: Auth, Users, Payments, RWA, Agro, IPFS, Health      |
-|                                                               |
-|      +------------------+       +-------------------------+   |
-|      |  D1 Database     |<----->|   Drizzle ORM           |   |
-|      +------------------+       +-------------------------+   |
-|                                                               |
-|      +------------------+       +-------------------------+   |
-|      |   R2 Storage     |       | IPFS/Pinata Proxy       |   |
-|      +------------------+       +-------------------------+   |
-|                                                               |
-|      +-----------------------------------------------+        |
-|      | External Services: Pagamentos / Webhooks      |        |
-|      +-----------------------------------------------+        |
-+---------------------------------------------------------------+
-```
+## 🏁 Status do Projeto
 
-## 7. Diagrama de Fluxo – Autenticação JWT
-```text
-[Cliente]
-    |
-    | POST /auth/login
-    v
-[Validação Zod] --- parâmetros inválidos ---> erro 400
-    |
-    v
-[Consulta ao D1 via Drizzle]
-    |
-    | credenciais válidas?
-    |---- não ----> erro 401
-    |
-    v
-[Geração de JWT]
-    |
-    v
-[Resposta: token + payload]
-```
+🟡 Em desenvolvimento ativo — arquitetura de identidade consolidada, pronta para ambientes regulados, DAOs e tokenização de ativos.
 
-## 8. Diagrama de Fluxo – Rota Protegida
-```text
-[Cliente] --> GET /users/me --> [Middleware auth-jwt] --> token válido? 
-                                                       |     |
-                                                      não   sim
-                                                       |     v
-                                                  401 erro   [Controller]
-```
-
-## 9. API Gateway Routing (Visão Modular)
-```
-/api
- ├── /auth
- ├── /users
- ├── /payments
- ├── /webhooks
- ├── /rwa
- ├── /agro
- ├── /ipfs
- └── /health
-```
-
-## 10. Recomendações de Evolução
-#### Curto prazo
-*   Adicionar testes e2e com Miniflare.
-*   Criar logs estruturados.
-
-#### Médio prazo
-*   Implementar refresh tokens.
-*   Criar auditoria on-chain opcional para módulos sensíveis.
-
-#### Longo prazo
-*   Introduzir DID/VC (Identidade Descentralizada).
-*   Migrar alguns módulos para Services separados (Workers AI, R2 Hooks etc.).
-
-## 11. Ambiente de Desenvolvimento
-
-Para executar este projeto localmente, siga os passos abaixo:
-
-1.  **Clone o repositório:**
-    ```bash
-    git clone https://github.com/ASPPIBRA-DAO/CENTRAL-SYSTEM-API.git
-    cd CENTRAL-SYSTEM-API
-    ```
-
-2.  **Instale as dependências:**  
-    *Este projeto usa PNPM como gerenciador de pacotes.*
-    ```bash
-    pnpm install
-    ```
-
-3.  **Configure as variáveis de ambiente:**  
-    *Crie um arquivo `.dev.vars` na raiz do projeto e adicione os segredos necessários (tokens, connection strings do D1, etc.).*
-
-4.  **Execute as migrações do banco de dados:**
-    ```bash
-    pnpm run drizzle:migrate
-    ```
-
-5.  **Inicie o servidor de desenvolvimento:**
-    ```bash
-    pnpm run dev
-    ```
+Este repositório implementa um núcleo soberano de identidade e governança institucional para Web2 + Web3.
