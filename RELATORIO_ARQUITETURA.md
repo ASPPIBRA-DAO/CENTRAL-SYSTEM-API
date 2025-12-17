@@ -1,10 +1,10 @@
 # 🕵️ RELATÓRIO DE AUDITORIA - CENTRAL-SYSTEM-API
-Data: 12/16/2025, 9:43:57 PM
+Data: 12/17/2025, 2:28:38 AM
 Diretório Raiz: /home/user/CENTRAL-SYSTEM-API
 
 ---
 
-## 1. 🌳 ESTRUTURA DE ARQUIVOS\n```text\n├── .idx/\n│   └── dev.nix\n├── migrations/\n│   ├── meta/\n│   │   ├── _journal.json\n│   │   └── 0000_snapshot.json\n│   └── 0000_unique_red_hulk.sql\n├── public/\n│   ├── css/\n│   │   └── style.css\n│   ├── icons/\n│   │   ├── android-chrome-192x192.png\n│   │   ├── android-chrome-512x512.png\n│   │   ├── apple-touch-icon.png\n│   │   ├── favicon-16x16.png\n│   │   └── favicon-32x32.png\n│   ├── img/\n│   │   └── social-preview.png\n│   ├── js/\n│   │   └── dashboard.js\n│   ├── favicon.ico\n│   ├── robots.txt\n│   ├── site.webmanifest\n│   └── sitemap.xml\n├── scripts/\n│   ├── audit-project.js\n│   ├── build-seo.mjs\n│   └── cloudflare-analytics.js\n├── src/\n│   ├── db/\n│   │   ├── index.ts\n│   │   └── schema.ts\n│   ├── middlewares/\n│   │   ├── auth-jwt.ts\n│   │   └── rate-limit.ts\n│   ├── routes/\n│   │   ├── core/\n│   │   │   ├── auth/\n│   │   │   │   ├── index.ts\n│   │   │   │   └── session.ts\n│   │   │   ├── health.ts\n│   │   │   └── webhooks.ts\n│   │   ├── platform/\n│   │   │   ├── payments.ts\n│   │   │   └── storage.ts\n│   │   └── products/\n│   │       ├── agro/\n│   │       │   └── index.ts\n│   │       ├── posts/\n│   │       │   └── index.ts\n│   │       └── rwa/\n│   │           └── index.ts\n│   ├── types/\n│   │   ├── bindings.d.ts\n│   │   └── manifest.d.ts\n│   ├── utils/\n│   │   ├── auth-guard.ts\n│   │   └── response.ts\n│   ├── validators/\n│   │   └── users.ts\n│   ├── views/\n│   │   └── dashboard.ts\n│   └── index.ts\n├── test/\n│   ├── env.d.ts\n│   ├── index.spec.ts\n│   └── tsconfig.json\n├── .dev.vars\n├── .editorconfig\n├── .gitignore\n├── .prettierrc\n├── drizzle.config.ts\n├── package.json\n├── pnpm-lock.yaml\n├── README.md\n├── tsconfig.json\n├── vitest.config.mts\n├── worker-configuration.d.ts\n└── wrangler.jsonc\n\n```\n\n## 2. ⚙️ CONFIGURAÇÕES CRÍTICAS\n\n### 📄 wrangler.jsonc\n```jsonc\n{
+## 1. 🌳 ESTRUTURA DE ARQUIVOS\n```text\n├── .idx/\n│   └── dev.nix\n├── migrations/\n│   ├── meta/\n│   │   ├── _journal.json\n│   │   ├── 0000_snapshot.json\n│   │   └── 0001_snapshot.json\n│   ├── 0000_unique_red_hulk.sql\n│   └── 0001_furry_sunspot.sql\n├── public/\n│   ├── css/\n│   │   └── style.css\n│   ├── icons/\n│   │   ├── android-chrome-192x192.png\n│   │   ├── android-chrome-512x512.png\n│   │   ├── apple-touch-icon.png\n│   │   ├── favicon-16x16.png\n│   │   └── favicon-32x32.png\n│   ├── img/\n│   │   └── social-preview.png\n│   ├── js/\n│   │   └── dashboard.js\n│   ├── favicon.ico\n│   ├── robots.txt\n│   ├── site.webmanifest\n│   └── sitemap.xml\n├── scripts/\n│   ├── audit-project.js\n│   ├── build-seo.mjs\n│   └── cloudflare-analytics.js\n├── src/\n│   ├── db/\n│   │   ├── index.ts\n│   │   └── schema.ts\n│   ├── middlewares/\n│   │   ├── auth-jwt.ts\n│   │   └── rate-limit.ts\n│   ├── routes/\n│   │   ├── core/\n│   │   │   ├── auth/\n│   │   │   │   ├── index.ts\n│   │   │   │   └── session.ts\n│   │   │   ├── health.ts\n│   │   │   └── webhooks.ts\n│   │   ├── platform/\n│   │   │   ├── payments.ts\n│   │   │   └── storage.ts\n│   │   └── products/\n│   │       ├── agro/\n│   │       │   └── index.ts\n│   │       ├── posts/\n│   │       │   └── index.ts\n│   │       └── rwa/\n│   │           └── index.ts\n│   ├── types/\n│   │   ├── bindings.d.ts\n│   │   └── manifest.d.ts\n│   ├── utils/\n│   │   ├── auth-guard.ts\n│   │   └── response.ts\n│   ├── validators/\n│   │   └── users.ts\n│   ├── views/\n│   │   └── dashboard.ts\n│   └── index.ts\n├── test/\n│   ├── env.d.ts\n│   ├── index.spec.ts\n│   └── tsconfig.json\n├── .dev.vars\n├── .editorconfig\n├── .gitignore\n├── .prettierrc\n├── drizzle.config.ts\n├── package.json\n├── pnpm-lock.yaml\n├── README.md\n├── tsconfig.json\n├── vitest.config.mts\n├── worker-configuration.d.ts\n└── wrangler.jsonc\n\n```\n\n## 2. ⚙️ CONFIGURAÇÕES CRÍTICAS\n\n### 📄 wrangler.jsonc\n```jsonc\n{
   // 🏷️ IDENTIFICAÇÃO DO PROJETO
   "name": "governance-system",
   "main": "src/index.ts",
@@ -20,8 +20,6 @@ Diretório Raiz: /home/user/CENTRAL-SYSTEM-API
   ],
 
   // 📂 ARQUIVOS ESTÁTICOS (CORRIGIDO)
-  // Trocamos 'assets' por 'site' para gerar o __STATIC_CONTENT_MANIFEST
-  // necessário para o 'serveStatic' do Hono funcionar corretamente.
   "site": {
     "bucket": "./public"
   },
@@ -59,6 +57,18 @@ Diretório Raiz: /home/user/CENTRAL-SYSTEM-API
       "bucket_name": "governance-system-assets",
       "preview_bucket_name": "governance-system-assets"
     }
+  ],
+
+  // 🔑 ARMAZENAMENTO (KV)
+  "kv_namespaces": [
+    {
+      "binding": "KV_AUTH",
+      "id": "YOUR_KV_AUTH_ID_HERE"
+    },
+    {
+      "binding": "KV_CACHE",
+      "id": "YOUR_KV_CACHE_ID_HERE"
+    }
   ]
 }\n```\n\n### ❌ wrangler.toml (Não encontrado)\n\n### 📄 package.json\n```jsonc\n{
     "name": "gov-system-backend",
@@ -76,6 +86,7 @@ Diretório Raiz: /home/user/CENTRAL-SYSTEM-API
         "@cloudflare/vitest-pool-workers": "^0.8.19",
         "@types/bcryptjs": "^3.0.0",
         "@types/jsonwebtoken": "^9.0.10",
+        "@types/qrcode": "^1.5.6",
         "dotenv": "^17.2.3",
         "drizzle-kit": "^0.31.8",
         "typescript": "^5.5.2",
@@ -89,6 +100,10 @@ Diretório Raiz: /home/user/CENTRAL-SYSTEM-API
         "drizzle-orm": "^0.44.7",
         "hono": "^4.10.7",
         "jsonwebtoken": "^9.0.3",
+        "otplib": "^12.0.1",
+        "qrcode": "^1.5.4",
+        "siwe": "^3.0.0",
+        "viem": "^2.42.1",
         "zod": "^4.1.13"
     }
 }\n```\n\n### 📄 drizzle.config.ts\n```jsonc\nimport { defineConfig } from "drizzle-kit";
@@ -162,28 +177,28 @@ export default defineConfig({
 	"exclude": ["test"],
 	"include": ["worker-configuration.d.ts", "src/**/*.ts"]
 }
-\n```\n\n### 📄 src/types/bindings.d.ts\n```jsonc\nimport { D1Database, R2Bucket, Fetcher } from "@cloudflare/workers-types";
+\n```\n\n### 📄 src/types/bindings.d.ts\n```jsonc\nimport { D1Database, R2Bucket, Fetcher, KVNamespace } from "@cloudflare/workers-types";
 
 export type Bindings = {
   // 1. Banco de Dados (D1)
   DB: D1Database;
 
   // 2. Armazenamento de Arquivos (R2)
-  // Mudamos de "ASSETS" para "STORAGE" no wrangler.jsonc para liberar o nome "ASSETS".
   STORAGE: R2Bucket;
 
   // 3. Arquivos Estáticos (Pasta Public)
-  // Este é o binding reservado que o Cloudflare cria automaticamente para a configuração "assets".
   ASSETS: Fetcher;
 
-  // 4. Variáveis de Ambiente e Segredos
-  JWT_SECRET: string;
-  ZERO_EX_API_KEY: string; 
-  
-  // ✅ ADICIONADO: Chave para a API da Moralis (RWA/Token Data)
-  MORALIS_API_KEY: string; 
+  // 4. Armazenamento de Chave-Valor (KV)
+  KV_AUTH: KVNamespace;
+  KV_CACHE: KVNamespace;
 
-  // 5. Variáveis do Cloudflare Analytics
+  // 5. Variáveis de Ambiente e Segredos
+  JWT_SECRET: string;
+  ZERO_EX_API_KEY: string;
+  MORALIS_API_KEY: string;
+
+  // 6. Variáveis do Cloudflare Analytics
   CLOUDFLARE_ACCOUNT_ID: string;
   CLOUDFLARE_ZONE_ID: string;
   CLOUDFLARE_API_TOKEN: string;

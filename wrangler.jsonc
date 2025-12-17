@@ -14,8 +14,6 @@
   ],
 
   // 📂 ARQUIVOS ESTÁTICOS (CORRIGIDO)
-  // Trocamos 'assets' por 'site' para gerar o __STATIC_CONTENT_MANIFEST
-  // necessário para o 'serveStatic' do Hono funcionar corretamente.
   "site": {
     "bucket": "./public"
   },
@@ -52,6 +50,18 @@
       "binding": "STORAGE",
       "bucket_name": "governance-system-assets",
       "preview_bucket_name": "governance-system-assets"
+    }
+  ],
+
+  // 🔑 ARMAZENAMENTO (KV)
+  "kv_namespaces": [
+    {
+      "binding": "KV_AUTH",
+      "id": "YOUR_KV_AUTH_ID_HERE"
+    },
+    {
+      "binding": "KV_CACHE",
+      "id": "YOUR_KV_CACHE_ID_HERE"
     }
   ]
 }
