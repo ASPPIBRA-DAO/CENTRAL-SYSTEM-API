@@ -178,21 +178,25 @@ export const DashboardTemplate = (props: DashboardProps) => html`
         </div>
 
         <div class="summary-grid">
+          
           <div class="summary-card glass-panel">
-            <h3>Total Requests (24h)</h3>
+            <h3>Network Requests</h3>
             <p class="value" id="lbl-total-requests"><span class="loading">0000</span></p>
-            <div class="label-badge">Monitoring</div>
+            <div class="label-badge">24h Activity</div>
           </div>
+
           <div class="summary-card glass-panel">
-            <h3>Data Transfer</h3>
+            <h3>Processed Data</h3>
             <p class="value" id="lbl-total-bytes"><span class="loading">-- GB</span></p>
-            <div class="label-badge">Bandwidth</div>
+            <div class="label-badge">Throughput</div>
           </div>
+
           <div class="summary-card glass-panel">
-            <h3>DB Workload</h3>
-            <p class="value" id="lbl-summary-writes"><span class="loading">0</span></p>
-            <div class="label-badge">Writes/Sec</div>
+            <h3>Global Users</h3>
+            <p class="value" id="lbl-uniques"><span class="loading">--</span></p>
+            <div class="label-badge">Active Nodes</div>
           </div>
+          
         </div>
 
         <div class="tech-dashboard">
@@ -213,24 +217,30 @@ export const DashboardTemplate = (props: DashboardProps) => html`
               </div>
             </div>
           </div>
+
           <div class="col-infra">
             <div class="db-metrics-row">
+              
               <div class="metric-card glass-panel">
-                <div class="metric-title">DB Reads (24h)</div>
+                <div class="metric-title">State Queries (24h)</div>
                 <div class="metric-value" id="lbl-reads"><span class="loading">--</span></div>
                 <div class="metric-bar"><div class="bar-fill cyan" id="bar-reads" style="width: 0%;"></div></div>
               </div>
+              
               <div class="metric-card glass-panel">
-                <div class="metric-title">DB Writes (24h)</div>
+                <div class="metric-title">Ledger Mutations</div>
                 <div class="metric-value" id="lbl-writes"><span class="loading">--</span></div>
                 <div class="metric-bar"><div class="bar-fill purple" id="bar-writes" style="width: 0%;"></div></div>
               </div>
+              
               <div class="metric-card glass-panel">
-                <div class="metric-title">DB Workload (24h)</div>
+                <div class="metric-title">Edge Operations</div>
                 <div class="metric-value" id="lbl-workload"><span class="loading">--</span></div>
                 <div class="metric-bar"><div class="bar-fill purple" id="bar-workload" style="width: 0%;"></div></div>
               </div>
+              
             </div>
+
             <div class="countries-card glass-panel">
               <div class="card-header">
                 <h4 style="margin:0; font-weight:600; color: var(--text-highlight); display:flex; align-items:center; gap:8px;">

@@ -53,6 +53,10 @@ export const audit_logs = sqliteTable('audit_logs', {
     resource: text('resource'), // Ex: 'users:123', 'proposals:456'
     status: text('status', { enum: ['success', 'failure'] }).default('success'),
     ipAddress: text('ip_address'),
+    
+    // [NOVO] Adicionado para suportar o mapa de tráfego
+    country: text('country'), 
+    
     userAgent: text('user_agent'),
     metadata: text('metadata', { mode: 'json' }), // Contexto adicional
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),

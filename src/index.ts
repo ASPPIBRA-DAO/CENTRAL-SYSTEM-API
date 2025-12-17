@@ -1,11 +1,10 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { serveStatic } from 'hono/cloudflare-workers';
-import manifest from '__STATIC_CONTENT_MANIFEST';
 import { Bindings } from './types/bindings';
 import { createDb, Database } from './db';
 import { error } from './utils/response';
 import { DashboardTemplate } from './views/dashboard';
+import { AuditService } from './services/audit';
 
 // --- CORE MODULES ---
 import authRouter from './routes/core/auth';
@@ -22,7 +21,6 @@ import agroRouter from './routes/products/agro';
 import rwaRouter from './routes/products/rwa';
 import postsRouter from './routes/products/posts';
 
-
 type Variables = {
   db: Database;
 };
@@ -37,6 +35,8 @@ const app = new Hono<AppType>();
 // =================================================================
 // 1. MIDDLEWARES GLOBAIS
 // =================================================================
+
+// 1.1 CORS
 app.use('/*', cors({
   origin: (origin) => {
     const allowedOrigins = [
@@ -54,6 +54,7 @@ app.use('/*', cors({
   credentials: true,
 }));
 
+// 1.2 Database Injection
 app.use(async (c, next) => {
   try {
     const db = createDb(c.env.DB);
@@ -64,14 +65,63 @@ app.use(async (c, next) => {
   }
 });
 
+// 1.3 Audit & Telemetry (NOVO)
+// Captura métricas de todas as requisições API (exceto arquivos estáticos)
+app.use('*', async (c, next) => {
+  const start = Date.now();
+  
+  await next(); // Executa a rota real
+
+  const path = c.req.path;
+  // Ignora assets estáticos e rotas de monitoramento interno para não poluir o DB
+  if (!path.match(/\.(css|js|png|jpg|ico|json|map)$/) && !path.startsWith('/monitoring')) {
+    const audit = new AuditService(c.env);
+    const executionTime = Date.now() - start;
+
+    // Fire-and-forget
+    c.executionCtx.waitUntil(
+      audit.log({
+        action: "API_REQUEST",
+        ip: c.req.header("cf-connecting-ip") || "unknown",
+        country: c.req.header("cf-ipcountry") || "XX",
+        userAgent: c.req.header("user-agent"),
+        // [CORREÇÃO]: Mudado para minúsculo para bater com o Schema
+        status: c.res.ok ? "success" : "failure",
+        metadata: {
+          path: path,
+          method: c.req.method,
+          executionTimeMs: executionTime
+        },
+        metrics: {
+          dbReads: c.req.method === 'GET' ? 1 : 0,
+          dbWrites: ['POST', 'PUT', 'DELETE'].includes(c.req.method) ? 1 : 0,
+          bytesOut: parseInt(c.res.headers.get("content-length") || "0")
+        }
+      })
+    );
+  }
+});
+
 // =================================================================
-// 2. ROTA PRINCIPAL (DASHBOARD) - PRIORIDADE 1
+// 2. ROTAS DE DASHBOARD E MONITORAMENTO
 // =================================================================
+
+// Renderiza o HTML do Dashboard
 app.get('/', (c) => {
-  const url = new URL(c.req.url, 'http://localhost');
+  const url = new URL(c.req.url);
   const isLocal = url.hostname.includes('localhost') || url.hostname.includes('127.0.0.1');
   const domain = isLocal ? url.origin : "https://api.asppibra.com";
   const imageUrl = `${domain}/img/social-preview.png`;
+
+  // Log de Visualização do Dashboard
+  const audit = new AuditService(c.env);
+  c.executionCtx.waitUntil(audit.log({
+    action: "DASHBOARD_VIEW",
+    ip: c.req.header("cf-connecting-ip") || "unknown",
+    country: c.req.header("cf-ipcountry") || "XX",
+    // [CORREÇÃO]: Mudado para minúsculo
+    status: "success"
+  }));
 
   return c.html(DashboardTemplate({
     version: "1.1.0",
@@ -82,18 +132,18 @@ app.get('/', (c) => {
   }));
 });
 
-app.get('/monitoring', (c) => c.redirect('/api/health/analytics'));
+app.get('/api/stats', async (c) => {
+  const audit = new AuditService(c.env);
+  const metrics = await audit.getDashboardMetrics();
+  return c.json(metrics);
+});
+
+app.get('/monitoring', (c) => c.redirect('/api/health'));
 
 // =================================================================
-// 3. ARQUIVOS ESTÁTICOS - PRIORIDADE 2
+// 3. API & ROTAS MODULARES
 // =================================================================
-// [CORREÇÃO]: root: './' é necessário para a Cloudflare encontrar os arquivos reais.
-// Como mudamos a ordem das rotas (Dashboard vem antes), isso não deve quebrar o local.
-app.use('/*', serveStatic({ root: './', manifest }));
 
-// =================================================================
-// 4. API & ROTAS MODULARES
-// =================================================================
 // --- CORE ---
 app.route('/api/auth', authRouter);
 app.route('/api/auth', sessionRouter);
@@ -109,14 +159,45 @@ app.route('/api/agro', agroRouter);
 app.route('/api/rwa', rwaRouter);
 app.route('/api/posts', postsRouter);
 
+// =================================================================
+// 4. ARQUIVOS ESTÁTICOS
+// =================================================================
+app.get('/*', async (c) => {
+  return c.env.ASSETS.fetch(c.req.raw);
+});
 
 // =================================================================
-// 5. ERROS
+// 5. ERROS & ENTRY POINT
 // =================================================================
 app.notFound((c) => c.json({ success: false, message: 'Rota não encontrada (404)' }, 404));
+
 app.onError((err, c) => {
   console.error('🔥 Erro Interno:', err);
   return c.json({ success: false, message: 'Erro Interno do Servidor' }, 500);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+    ctx.waitUntil(updateTokenPrice(env));
+  },
+};
+
+async function updateTokenPrice(env: Bindings) {
+  try {
+    const response = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd"
+    );
+
+    if (response.ok) {
+      const data: any = await response.json();
+      const price = data.binancecoin?.usd || 0;
+      if (env.KV_CACHE) {
+        await env.KV_CACHE.put("market:price_usd", price.toString());
+        console.log(`✅ Cron: Preço atualizado para $${price}`);
+      }
+    }
+  } catch (error) {
+    console.error("❌ Cron: Falha ao atualizar preço", error);
+  }
+}

@@ -1,75 +1,25 @@
 # 🕵️ RELATÓRIO DE AUDITORIA - CENTRAL-SYSTEM-API
-Data: 12/17/2025, 2:28:38 AM
+Data: 12/17/2025, 5:27:23 AM
 Diretório Raiz: /home/user/CENTRAL-SYSTEM-API
 
 ---
 
 ## 1. 🌳 ESTRUTURA DE ARQUIVOS\n```text\n├── .idx/\n│   └── dev.nix\n├── migrations/\n│   ├── meta/\n│   │   ├── _journal.json\n│   │   ├── 0000_snapshot.json\n│   │   └── 0001_snapshot.json\n│   ├── 0000_unique_red_hulk.sql\n│   └── 0001_furry_sunspot.sql\n├── public/\n│   ├── css/\n│   │   └── style.css\n│   ├── icons/\n│   │   ├── android-chrome-192x192.png\n│   │   ├── android-chrome-512x512.png\n│   │   ├── apple-touch-icon.png\n│   │   ├── favicon-16x16.png\n│   │   └── favicon-32x32.png\n│   ├── img/\n│   │   └── social-preview.png\n│   ├── js/\n│   │   └── dashboard.js\n│   ├── favicon.ico\n│   ├── robots.txt\n│   ├── site.webmanifest\n│   └── sitemap.xml\n├── scripts/\n│   ├── audit-project.js\n│   ├── build-seo.mjs\n│   └── cloudflare-analytics.js\n├── src/\n│   ├── db/\n│   │   ├── index.ts\n│   │   └── schema.ts\n│   ├── middlewares/\n│   │   ├── auth-jwt.ts\n│   │   └── rate-limit.ts\n│   ├── routes/\n│   │   ├── core/\n│   │   │   ├── auth/\n│   │   │   │   ├── index.ts\n│   │   │   │   └── session.ts\n│   │   │   ├── health.ts\n│   │   │   └── webhooks.ts\n│   │   ├── platform/\n│   │   │   ├── payments.ts\n│   │   │   └── storage.ts\n│   │   └── products/\n│   │       ├── agro/\n│   │       │   └── index.ts\n│   │       ├── posts/\n│   │       │   └── index.ts\n│   │       └── rwa/\n│   │           └── index.ts\n│   ├── types/\n│   │   ├── bindings.d.ts\n│   │   └── manifest.d.ts\n│   ├── utils/\n│   │   ├── auth-guard.ts\n│   │   └── response.ts\n│   ├── validators/\n│   │   └── users.ts\n│   ├── views/\n│   │   └── dashboard.ts\n│   └── index.ts\n├── test/\n│   ├── env.d.ts\n│   ├── index.spec.ts\n│   └── tsconfig.json\n├── .dev.vars\n├── .editorconfig\n├── .gitignore\n├── .prettierrc\n├── drizzle.config.ts\n├── package.json\n├── pnpm-lock.yaml\n├── README.md\n├── tsconfig.json\n├── vitest.config.mts\n├── worker-configuration.d.ts\n└── wrangler.jsonc\n\n```\n\n## 2. ⚙️ CONFIGURAÇÕES CRÍTICAS\n\n### 📄 wrangler.jsonc\n```jsonc\n{
-  // 🏷️ IDENTIFICAÇÃO DO PROJETO
-  "name": "governance-system",
-  "main": "src/index.ts",
-  "compatibility_date": "2025-01-01",
-  "account_id": "5d91807e648c183cb7833caa06dbcbdb",
-
-  // ✅ DOMÍNIO PERSONALIZADO
-  "routes": [
-    {
-      "pattern": "api.asppibra.com",
-      "custom_domain": true
-    }
-  ],
-
-  // 📂 ARQUIVOS ESTÁTICOS (CORRIGIDO)
-  "site": {
-    "bucket": "./public"
-  },
-
-  // ⚙️ COMPATIBILIDADE E FLAGS
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
-
-  // 👁️ OBSERVABILIDADE
   "observability": {
-    "enabled": true
-  },
-
-  // 🟢 VARIÁVEIS DE AMBIENTE
-  "vars": {
-    "CLOUDFLARE_ACCOUNT_ID": "5d91807e648c183cb7833caa06dbcbdb",
-    "CLOUDFLARE_ZONE_ID": "60681ad827e114d9e51add1f079dd5d2"
-  },
-
-  // 📦 BANCO DE DADOS (D1)
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "governance-system-db",
-      "database_id": "fbdff5ac-2fcc-4182-9cbf-be6c1d08e287",
-      "migrations_dir": "./migrations"
-    }
-  ],
-
-  // 🗂️ ARMAZENAMENTO (R2)
-  "r2_buckets": [
-    {
-      "binding": "STORAGE",
-      "bucket_name": "governance-system-assets",
-      "preview_bucket_name": "governance-system-assets"
-    }
-  ],
-
-  // 🔑 ARMAZENAMENTO (KV)
-  "kv_namespaces": [
-    {
-      "binding": "KV_AUTH",
-      "id": "YOUR_KV_AUTH_ID_HERE"
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true
     },
-    {
-      "binding": "KV_CACHE",
-      "id": "YOUR_KV_CACHE_ID_HERE"
+    "traces": {
+      "enabled": true,
+      "persist": true,
+      "head_sampling_rate": 1
     }
-  ]
+  }
 }\n```\n\n### ❌ wrangler.toml (Não encontrado)\n\n### 📄 package.json\n```jsonc\n{
     "name": "gov-system-backend",
     "version": "0.0.0",
