@@ -1,6 +1,6 @@
 {
   // 🏷️ IDENTIFICAÇÃO DO PROJETO
-  "name": "governance-system",
+  "name": "central-system-api",
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
   "account_id": "5d91807e648c183cb7833caa06dbcbdb",
