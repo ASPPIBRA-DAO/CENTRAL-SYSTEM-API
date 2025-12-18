@@ -1,43 +1,99 @@
-// ARQUIVO: src/services/market.ts
 import { Bindings } from '../types/bindings';
 
-export async function getTokenMarketData(env: Bindings) {
-  // Seus Contratos
-  const TOKEN_ADDRESS = "0x0697AB2B003FD2Cbaea2dF1ef9b404E45bE59d4C";
-  const PAIR_ADDRESS  = "0xf1961269D193f6511A1e24aaC93FBCA4E815e4Ca";
-  const CHAIN = "bsc"; 
-
-  const headers = {
-    "Accept": "application/json",
-    "X-API-Key": env.MORALIS_API_KEY // Isso vai ler do .dev.vars localmente
-  };
+export async function getTokenMarketData(env: Bindings, mode: 'full' | 'price_only' = 'full') {
+  // --- CONFIGURAÇÃO ---
+  // Endereço do Pool ASPPBR/USDT na BSC (GeckoTerminal)
+  const POOL_ADDRESS = "0xf1961269d193f6511a1e24aac93fbca4e815e4ca"; 
+  const NETWORK = "bsc";
 
   try {
-    console.log(`🔍 [TESTE LOCAL] Buscando dados para ${TOKEN_ADDRESS}...`);
-
-    // Busca Preço
-    const priceReq = await fetch(
-      `https://deep-index.moralis.io/api/v2.2/erc20/${TOKEN_ADDRESS}/price?chain=${CHAIN}`,
-      { headers }
-    );
-
-    if (!priceReq.ok) {
-      const err = await priceReq.text();
-      throw new Error(`Erro Moralis API: ${priceReq.status} - ${err}`);
+    // =================================================================
+    // 1. DADOS FINANCEIROS (Preço, Liq, FDV, Variação)
+    // =================================================================
+    // Fonte: GeckoTerminal Pool API (Gratuito e Completo)
+    const poolUrl = `https://api.geckoterminal.com/api/v2/networks/${NETWORK}/pools/${POOL_ADDRESS}`;
+    
+    const poolRes = await fetch(poolUrl);
+    
+    if (!poolRes.ok) {
+      throw new Error(`Erro GeckoTerminal Pool API: ${poolRes.status}`);
+    }
+    
+    const poolJson: any = await poolRes.json();
+    
+    // Proteção contra resposta vazia
+    if (!poolJson.data || !poolJson.data.attributes) {
+      throw new Error("Dados do pool inválidos ou vazios");
     }
 
-    const priceData: any = await priceReq.json();
+    const attr = poolJson.data.attributes;
+
+    // Extração Direta dos Dados
+    const price = parseFloat(attr.base_token_price_usd || "0");
+    const change24h = parseFloat(attr.price_change_percentage?.h24 || "0");
+    const liquidity = parseFloat(attr.reserve_in_usd || "0");
+    const marketCap = parseFloat(attr.fdv_usd || "0");
+
+    // MODO RÁPIDO (Cron de 5 min): 
+    // Retorna os dados financeiros e encerra para economizar tempo de execução
+    if (mode === 'price_only') {
+      return {
+        price,
+        change24h,
+        marketCap,
+        liquidity,
+        type: 'partial'
+      };
+    }
+
+    // =================================================================
+    // 2. MODO FULL (Cron de 1h): GRÁFICO (Histórico OHLCV)
+    // =================================================================
+    let history: any[] = [];
     
-    // Retorna o resultado simplificado para teste
+    try {
+      // Busca velas DIÁRIAS (day) dos últimos 30 dias
+      const ohlcvUrl = `https://api.geckoterminal.com/api/v2/networks/${NETWORK}/pools/${POOL_ADDRESS}/ohlcv/day?limit=30`;
+      
+      const histRes = await fetch(ohlcvUrl);
+      const histData: any = await histRes.json();
+      const candles = histData.data?.attributes?.ohlcv_list;
+
+      if (candles && Array.isArray(candles)) {
+        // O Gecko devolve array: [time, open, high, low, close, volume]
+        // Mapeamos para nosso formato leve: { t: timestamp, p: close_price }
+        history = candles.map((item: any) => ({
+          t: item[0], // Timestamp (seconds)
+          p: item[4]  // Close Price
+        })).sort((a: any, b: any) => a.t - b.t); // Garante ordem cronológica
+      }
+    } catch (e) {
+      console.warn("⚠️ Falha ao buscar gráfico GeckoTerminal (usando fallback):", e);
+    }
+
+    // Fallback de Segurança: Se a API de gráfico falhar, cria linha reta baseada no preço atual
+    // Isso impede que o gráfico no frontend fique vazio/quebrado
+    if (history.length === 0 && price > 0) {
+        const now = Math.floor(Date.now() / 1000);
+        history = [
+            { t: now - (86400 * 30), p: price }, // 30 dias atrás
+            { t: now, p: price }                 // Hoje
+        ];
+    }
+
     return {
-      source: "Moralis Local Test",
-      price: priceData.usdPrice,
-      exchange: priceData.exchangeName,
-      address: priceData.tokenAddress
+      price,
+      change24h,
+      marketCap,
+      liquidity,
+      history,
+      lastUpdated: new Date().toISOString(),
+      type: 'full'
     };
 
   } catch (error: any) {
-    console.error("❌ Falha no teste:", error.message);
-    return { error: error.message };
+    console.error("❌ Erro Market Service:", error.message);
+    // Retorna null para que o Cron saiba que falhou e não substitua o cache com lixo
+    return null;
   }
 }

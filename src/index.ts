@@ -5,7 +5,7 @@ import { createDb, Database } from './db';
 import { error } from './utils/response';
 import { DashboardTemplate } from './views/dashboard';
 import { AuditService } from './services/audit';
-// [NOVO] Importa o serviço oficial de mercado (Moralis)
+// Importa o serviço de mercado (Agora suporta modos 'full' e 'price_only')
 import { getTokenMarketData } from './services/market';
 
 // --- CORE MODULES ---
@@ -175,33 +175,71 @@ app.onError((err, c) => {
 
 export default {
   fetch: app.fetch,
-  // CRON JOB AUTOMÁTICO (A cada 5 minutos)
+  
+  // CRON JOB AUTOMÁTICO (Configurado para rodar a cada 5 min no Wrangler)
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(updateTokenPrice(env));
   },
 };
 
 /**
- * Função Worker que roda em background para manter o preço atualizado
- * Usa o serviço Moralis com contratos reais ($ASPPBR)
+ * Função de Atualização Híbrida (Smart Update)
+ * - A cada 5 min: Atualiza apenas o PREÇO (Baixo custo API)
+ * - A cada 1 hora: Atualiza GRÁFICO e LIQUIDEZ (Alto custo API)
  */
 async function updateTokenPrice(env: Bindings) {
   try {
-    // Chama o serviço que configuramos no src/services/market.ts
-    const data = await getTokenMarketData(env);
+    const KV_KEY_DATA = "market:data";
+    const KV_KEY_LAST_FULL = "market:last_full_sync";
 
-    if (data && env.KV_CACHE) {
-      // 1. Salva o Objeto Completo (Preço, Liquidez, MarketCap)
-      // Útil se você quiser mostrar mais detalhes no futuro
-      await env.KV_CACHE.put("market:data", JSON.stringify(data));
-      
-      // 2. Salva o Preço isolado (Para leitura rápida do Dashboard atual)
-      await env.KV_CACHE.put("market:price_usd", data.price.toString());
-      
-      console.log(`✅ Cron: Mercado atualizado via Moralis. Preço: $${data.price}`);
-    } else {
-      console.warn("⚠️ Cron: Falha ao obter dados da Moralis (Retorno vazio)");
+    // 1. Verifica quando foi a última atualização COMPLETA
+    const lastFullSyncStr = await env.KV_CACHE.get(KV_KEY_LAST_FULL);
+    const lastFullSync = lastFullSyncStr ? parseInt(lastFullSyncStr) : 0;
+    const now = Date.now();
+    
+    // Se passou mais de 1 hora (3600000 ms) ou nunca rodou, faz FULL update.
+    const isFullUpdateNeeded = (now - lastFullSync) > 3600000;
+    const mode = isFullUpdateNeeded ? 'full' : 'price_only';
+
+    // 2. Chama o serviço da Moralis com o modo correto
+    const newData = await getTokenMarketData(env, mode);
+
+    if (!newData) {
+      console.warn("⚠️ Cron: Falha ao obter dados da Moralis");
+      return;
     }
+
+    let finalData;
+
+    if (mode === 'full') {
+      // CENÁRIO A: Atualização Completa (Gráfico, Liq, Preço)
+      // Substitui tudo e atualiza o timestamp da última sync completa
+      finalData = newData;
+      await env.KV_CACHE.put(KV_KEY_LAST_FULL, now.toString());
+      console.log(`✅ Cron (FULL): Atualização completa (Gráfico 30d). Preço: $${newData.price}`);
+    
+    } else {
+      // CENÁRIO B: Atualização Rápida (Apenas Preço)
+      // Recupera o JSON antigo do Cache para manter o gráfico e liquidez
+      const currentCacheRaw = await env.KV_CACHE.get(KV_KEY_DATA);
+      const currentCache = currentCacheRaw ? JSON.parse(currentCacheRaw) : {};
+      
+      finalData = {
+        ...currentCache,        // Mantém histórico, liq, mcap antigos
+        price: newData.price,   // Atualiza preço novo
+        change24h: newData.change24h,
+        lastUpdated: new Date().toISOString()
+      };
+      console.log(`⚡ Cron (LITE): Apenas preço atualizado. Preço: $${newData.price}`);
+    }
+
+    // 3. Salva o resultado final no Cache
+    if (env.KV_CACHE) {
+      await env.KV_CACHE.put(KV_KEY_DATA, JSON.stringify(finalData));
+      // Salva também o preço isolado para leituras rápidas
+      await env.KV_CACHE.put("market:price_usd", finalData.price.toString());
+    }
+
   } catch (error) {
     console.error("❌ Cron: Erro crítico na atualização de mercado", error);
   }

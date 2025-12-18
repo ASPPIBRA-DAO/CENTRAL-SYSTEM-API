@@ -19,8 +19,6 @@ export type AuditEvent = {
   userAgent?: string;
   status: "success" | "failure";
   metadata?: Record<string, any>;
-  
-  // Métricas de Performance (KV)
   metrics?: {
     dbWrites?: number;
     dbReads?: number;
@@ -35,7 +33,6 @@ export class AuditService {
 
   constructor(env: Bindings) {
     this.db = env.DB;
-    // Fallback de segurança para KV
     this.kv = env.KV_CACHE || env.KV_AUTH; 
     this.storage = env.STORAGE;
   }
@@ -46,9 +43,9 @@ export class AuditService {
   async log(event: AuditEvent): Promise<void> {
     const tasks: Promise<any>[] = [];
 
-    // 1. Gravação Forense (D1 via Drizzle)
+    // 1. Gravação Forense (D1)
     try {
-      const dbTask = drizzle(this.db).insert(audit_logs).values({
+      tasks.push(drizzle(this.db).insert(audit_logs).values({
         actorId: event.actorId || "anon",
         action: event.action,
         resource: event.resource || null,
@@ -57,34 +54,26 @@ export class AuditService {
         userAgent: event.userAgent,
         country: event.country,
         metadata: event.metadata, 
-      }).run();
-      
-      tasks.push(dbTask);
+      }).run());
     } catch (e) {
       console.error("❌ Audit DB Error:", e);
     }
 
     // 2. Atualização do Dashboard (KV)
     if (event.status === "success" && this.kv) {
-      // Requests Totais
       tasks.push(this.incrementKV("stats:requests_24h", 1));
       
-      // Bandwidth
       if (event.metrics?.bytesOut) {
         tasks.push(this.incrementKV("stats:bandwidth_24h", event.metrics.bytesOut));
       }
 
-      // DB Workload
       if (event.metrics?.dbWrites) tasks.push(this.incrementKV("stats:db_writes_24h", event.metrics.dbWrites));
       if (event.metrics?.dbReads) tasks.push(this.incrementKV("stats:db_reads_24h", event.metrics.dbReads));
 
-      // [CORREÇÃO] Origem do Tráfego
-      // Filtra 'XX' (localhost) e garante que temos um código de país válido
       if (event.country && event.country.length === 2 && event.country !== 'XX') {
         tasks.push(this.incrementKV(`stats:country:${event.country}`, 1));
       }
       
-      // Visitantes Únicos
       if (event.ip) {
         tasks.push(this.trackUniqueVisitor(event.ip));
       }
@@ -95,20 +84,43 @@ export class AuditService {
 
   /**
    * 📊 Método para o Dashboard ler os dados
+   * [CORRIGIDO] Agora lê o pacote COMPLETO (Preço + Gráfico + Liquidez)
    */
   async getDashboardMetrics() {
     if (!this.kv) return this.getEmptyMetrics();
 
     // Busca dados em paralelo
-    const [reqs, bytes, writes, reads, uniques, price, countries] = await Promise.all([
+    const [reqs, bytes, writes, reads, uniques, marketRaw, countries] = await Promise.all([
       this.kv.get("stats:requests_24h"),
       this.kv.get("stats:bandwidth_24h"),
       this.kv.get("stats:db_writes_24h"),
       this.kv.get("stats:db_reads_24h"),
       this.kv.get("stats:uniques_24h"),
-      this.kv.get("market:price_usd"),
-      this.getTopCountries() // [NOVO] Chamada para buscar países
+      this.kv.get("market:data"), // <--- Lendo o JSON completo da Moralis!
+      this.getTopCountries()
     ]);
+
+    // Processa os dados de mercado
+    let marketData = { 
+      price: "0.00", 
+      change24h: 0, 
+      liquidity: 0, 
+      marketCap: 0, 
+      history: [] 
+    };
+
+    if (marketRaw) {
+      try {
+        const parsed = JSON.parse(marketRaw);
+        marketData = {
+          price: parseFloat(parsed.price || "0").toFixed(4),
+          change24h: parsed.change24h || 0,
+          liquidity: parsed.liquidity || 0,
+          marketCap: parsed.marketCap || 0,
+          history: parsed.history || []
+        };
+      } catch (e) { console.error("Erro parse market data", e); }
+    }
 
     return {
       networkRequests: parseInt(reqs || "0"),
@@ -118,10 +130,8 @@ export class AuditService {
         queries: parseInt(reads || "0"),
         mutations: parseInt(writes || "0"),
       },
-      market: {
-        price: parseFloat(price || "0").toFixed(4)
-      },
-      countries: countries // Agora retorna a lista real!
+      market: marketData, // Retorna o objeto completo para o Frontend desenhar o gráfico
+      countries: countries
     };
   }
 
@@ -133,7 +143,7 @@ export class AuditService {
       processedData: 0, 
       globalUsers: 0, 
       dbStats: { queries: 0, mutations: 0 }, 
-      market: { price: "0.00" }, 
+      market: { price: "0.00", change24h: 0, liquidity: 0, marketCap: 0, history: [] }, 
       countries: [] 
     };
   }
@@ -141,7 +151,6 @@ export class AuditService {
   private async incrementKV(key: string, value: number) {
     const current = await this.kv.get(key);
     const newValue = (parseInt(current || "0") + value).toString();
-    // Mantemos os dados por 24h para um dashboard "ao vivo"
     await this.kv.put(key, newValue, { expirationTtl: 86400 }); 
   }
 
@@ -154,45 +163,26 @@ export class AuditService {
     }
   }
 
-  /**
-   * [NOVO] Lê e processa a lista de países do KV
-   */
   private async getTopCountries() {
     if (!this.kv) return [];
-
-    // 1. Lista chaves que começam com "stats:country:"
     const list = await this.kv.list({ prefix: "stats:country:" });
     
-    // 2. Busca valores
     const tasks = list.keys.map(async (key) => {
       const val = await this.kv.get(key.name);
       const code = key.name.replace("stats:country:", ""); 
-      return {
-        code: code,
-        count: parseInt(val || "0")
-      };
+      return { code: code, count: parseInt(val || "0") };
     });
 
     const results = await Promise.all(tasks);
-
-    // 3. Traduz códigos para nomes (Ex: BR -> Brazil)
     const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
 
     return results
-      .sort((a, b) => b.count - a.count) // Ordena do maior para o menor
-      .slice(0, 10) // Pega top 10
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
       .map(item => {
         let name = item.code;
-        try {
-          name = regionNames.of(item.code) || item.code;
-        } catch { 
-          name = item.code; 
-        }
-        return {
-          code: item.code,
-          country: name,
-          count: item.count
-        };
+        try { name = regionNames.of(item.code) || item.code; } catch { name = item.code; }
+        return { code: item.code, country: name, count: item.count };
       });
   }
 }
