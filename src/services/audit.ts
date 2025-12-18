@@ -1,6 +1,6 @@
 import { D1Database, KVNamespace, R2Bucket } from "@cloudflare/workers-types";
 import { drizzle } from "drizzle-orm/d1";
-import { audit_logs } from "../db/schema"; // Importando a tabela correta
+import { audit_logs } from "../db/schema"; 
 import { Bindings } from "../types/bindings";
 
 // Tipos de ações monitoradas
@@ -12,15 +12,15 @@ export type AuditAction =
 
 export type AuditEvent = {
   action: AuditAction;
-  actorId?: string; // CORRIGIDO: Era userId, agora é actorId para bater com o schema
-  resource?: string; // NOVO: Para preencher a coluna 'resource' do schema
+  actorId?: string;
+  resource?: string;
   ip: string;
   country?: string;
   userAgent?: string;
-  status: "success" | "failure"; // CORRIGIDO: Lowercase para bater com o enum do schema
-  metadata?: Record<string, any>; // Objeto puro (Drizzle converte p/ JSON sozinho)
+  status: "success" | "failure";
+  metadata?: Record<string, any>;
   
-  // Métricas de Performance (Apenas para o KV, não vai pro D1)
+  // Métricas de Performance (KV)
   metrics?: {
     dbWrites?: number;
     dbReads?: number;
@@ -35,7 +35,7 @@ export class AuditService {
 
   constructor(env: Bindings) {
     this.db = env.DB;
-    // Tenta pegar o KV_CACHE, se falhar usa KV_AUTH como fallback para não quebrar
+    // Fallback de segurança para KV
     this.kv = env.KV_CACHE || env.KV_AUTH; 
     this.storage = env.STORAGE;
   }
@@ -46,8 +46,7 @@ export class AuditService {
   async log(event: AuditEvent): Promise<void> {
     const tasks: Promise<any>[] = [];
 
-    // 1. Gravação Forense (D1)
-    // O try/catch garante que falhas de log não derrubem a API principal
+    // 1. Gravação Forense (D1 via Drizzle)
     try {
       const dbTask = drizzle(this.db).insert(audit_logs).values({
         actorId: event.actorId || "anon",
@@ -56,8 +55,7 @@ export class AuditService {
         status: event.status,
         ipAddress: event.ip,
         userAgent: event.userAgent,
-        country: event.country, // Nota: Se o schema não tiver 'country', isso será ignorado ou precisa ser removido
-        // IMPORTANTE: Como seu schema tem { mode: 'json' }, passamos o objeto direto!
+        country: event.country,
         metadata: event.metadata, 
       }).run();
       
@@ -67,26 +65,26 @@ export class AuditService {
     }
 
     // 2. Atualização do Dashboard (KV)
-    // Só atualizamos estatísticas se a operação foi um sucesso
     if (event.status === "success" && this.kv) {
       // Requests Totais
       tasks.push(this.incrementKV("stats:requests_24h", 1));
       
-      // Bandwidth (Data Throughput)
+      // Bandwidth
       if (event.metrics?.bytesOut) {
         tasks.push(this.incrementKV("stats:bandwidth_24h", event.metrics.bytesOut));
       }
 
-      // DB Workload (Ledger Mutations / State Queries)
+      // DB Workload
       if (event.metrics?.dbWrites) tasks.push(this.incrementKV("stats:db_writes_24h", event.metrics.dbWrites));
       if (event.metrics?.dbReads) tasks.push(this.incrementKV("stats:db_reads_24h", event.metrics.dbReads));
 
-      // Origem do Tráfego (Traffic Origin)
-      if (event.country) {
+      // [CORREÇÃO] Origem do Tráfego
+      // Filtra 'XX' (localhost) e garante que temos um código de país válido
+      if (event.country && event.country.length === 2 && event.country !== 'XX') {
         tasks.push(this.incrementKV(`stats:country:${event.country}`, 1));
       }
       
-      // Visitantes Únicos (Global Users)
+      // Visitantes Únicos
       if (event.ip) {
         tasks.push(this.trackUniqueVisitor(event.ip));
       }
@@ -101,13 +99,15 @@ export class AuditService {
   async getDashboardMetrics() {
     if (!this.kv) return this.getEmptyMetrics();
 
-    const [reqs, bytes, writes, reads, uniques, price] = await Promise.all([
+    // Busca dados em paralelo
+    const [reqs, bytes, writes, reads, uniques, price, countries] = await Promise.all([
       this.kv.get("stats:requests_24h"),
       this.kv.get("stats:bandwidth_24h"),
       this.kv.get("stats:db_writes_24h"),
       this.kv.get("stats:db_reads_24h"),
       this.kv.get("stats:uniques_24h"),
       this.kv.get("market:price_usd"),
+      this.getTopCountries() // [NOVO] Chamada para buscar países
     ]);
 
     return {
@@ -119,12 +119,13 @@ export class AuditService {
         mutations: parseInt(writes || "0"),
       },
       market: {
-        price: price || "0.00"
+        price: parseFloat(price || "0").toFixed(4)
       },
-      // Aqui você pode implementar a lógica para retornar o Top 5 países
-      countries: [] 
+      countries: countries // Agora retorna a lista real!
     };
   }
+
+  // --- MÉTODOS PRIVADOS ---
 
   private getEmptyMetrics() {
     return { 
@@ -132,7 +133,7 @@ export class AuditService {
       processedData: 0, 
       globalUsers: 0, 
       dbStats: { queries: 0, mutations: 0 }, 
-      market: { price: "0" }, 
+      market: { price: "0.00" }, 
       countries: [] 
     };
   }
@@ -140,7 +141,8 @@ export class AuditService {
   private async incrementKV(key: string, value: number) {
     const current = await this.kv.get(key);
     const newValue = (parseInt(current || "0") + value).toString();
-    await this.kv.put(key, newValue, { expirationTtl: 86400 }); // Expira em 24h
+    // Mantemos os dados por 24h para um dashboard "ao vivo"
+    await this.kv.put(key, newValue, { expirationTtl: 86400 }); 
   }
 
   private async trackUniqueVisitor(ip: string) {
@@ -150,5 +152,47 @@ export class AuditService {
       await this.kv.put(key, "1", { expirationTtl: 86400 });
       await this.incrementKV("stats:uniques_24h", 1);
     }
+  }
+
+  /**
+   * [NOVO] Lê e processa a lista de países do KV
+   */
+  private async getTopCountries() {
+    if (!this.kv) return [];
+
+    // 1. Lista chaves que começam com "stats:country:"
+    const list = await this.kv.list({ prefix: "stats:country:" });
+    
+    // 2. Busca valores
+    const tasks = list.keys.map(async (key) => {
+      const val = await this.kv.get(key.name);
+      const code = key.name.replace("stats:country:", ""); 
+      return {
+        code: code,
+        count: parseInt(val || "0")
+      };
+    });
+
+    const results = await Promise.all(tasks);
+
+    // 3. Traduz códigos para nomes (Ex: BR -> Brazil)
+    const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+
+    return results
+      .sort((a, b) => b.count - a.count) // Ordena do maior para o menor
+      .slice(0, 10) // Pega top 10
+      .map(item => {
+        let name = item.code;
+        try {
+          name = regionNames.of(item.code) || item.code;
+        } catch { 
+          name = item.code; 
+        }
+        return {
+          code: item.code,
+          country: name,
+          count: item.count
+        };
+      });
   }
 }

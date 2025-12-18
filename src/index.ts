@@ -5,6 +5,8 @@ import { createDb, Database } from './db';
 import { error } from './utils/response';
 import { DashboardTemplate } from './views/dashboard';
 import { AuditService } from './services/audit';
+// [NOVO] Importa o serviço oficial de mercado (Moralis)
+import { getTokenMarketData } from './services/market';
 
 // --- CORE MODULES ---
 import authRouter from './routes/core/auth';
@@ -65,28 +67,22 @@ app.use(async (c, next) => {
   }
 });
 
-// 1.3 Audit & Telemetry (DADOS REAIS - ZERO FAKE)
-// Captura métricas de todas as requisições API (exceto arquivos estáticos)
+// 1.3 Audit & Telemetry (PRODUÇÃO)
 app.use('*', async (c, next) => {
   const start = Date.now();
   
-  await next(); // Executa a rota real
+  await next(); 
 
   const path = c.req.path;
-  // Ignora assets estáticos e rotas de monitoramento interno para não poluir o DB
   if (!path.match(/\.(css|js|png|jpg|ico|json|map)$/) && !path.startsWith('/monitoring')) {
     const audit = new AuditService(c.env);
     const executionTime = Date.now() - start;
 
-    // Fire-and-forget
     c.executionCtx.waitUntil(
       audit.log({
         action: "API_REQUEST",
         ip: c.req.header("cf-connecting-ip") || "unknown",
-        
-        // [VERDADE]: Sem simulação. Se não tiver header (localhost), é XX.
         country: c.req.header("cf-ipcountry") || "XX",
-        
         userAgent: c.req.header("user-agent"),
         status: c.res.ok ? "success" : "failure",
         metadata: {
@@ -108,22 +104,17 @@ app.use('*', async (c, next) => {
 // 2. ROTAS DE DASHBOARD E MONITORAMENTO
 // =================================================================
 
-// Renderiza o HTML do Dashboard
 app.get('/', (c) => {
   const url = new URL(c.req.url);
   const isLocal = url.hostname.includes('localhost') || url.hostname.includes('127.0.0.1');
   const domain = isLocal ? url.origin : "https://api.asppibra.com";
   const imageUrl = `${domain}/img/social-preview.png`;
 
-  // Log de Visualização do Dashboard
   const audit = new AuditService(c.env);
   c.executionCtx.waitUntil(audit.log({
     action: "DASHBOARD_VIEW",
     ip: c.req.header("cf-connecting-ip") || "unknown",
-    
-    // [VERDADE]: Mantém consistência com o middleware acima
     country: c.req.header("cf-ipcountry") || "XX",
-    
     status: "success"
   }));
 
@@ -148,34 +139,26 @@ app.get('/monitoring', (c) => c.redirect('/api/health'));
 // 3. API & ROTAS MODULARES
 // =================================================================
 
-// --- CORE ---
 app.route('/api/auth', authRouter);
 app.route('/api/auth', sessionRouter);
 app.route('/api/health', healthRouter);
 app.route('/api/webhooks', webhooksRouter);
 
-// --- PLATFORM ---
 app.route('/api/payments', paymentsRouter);
 app.route('/api/storage', storageRouter);
 
-// --- PRODUCTS ---
 app.route('/api/agro', agroRouter);
 app.route('/api/rwa', rwaRouter);
 app.route('/api/posts', postsRouter);
 
 // =================================================================
-// 4. ARQUIVOS ESTÁTICOS (CORRIGIDO: Cast 'as any')
+// 4. ARQUIVOS ESTÁTICOS
 // =================================================================
 app.get('/*', async (c) => {
   try {
-    // Evita loop se o browser tentar buscar a raiz como arquivo
     if (new URL(c.req.url).pathname === '/') return c.notFound();
-    
-    // [CORREÇÃO AQUI]: Adicionado 'as any' para silenciar o erro de getSetCookie do TypeScript
     return await c.env.ASSETS.fetch(c.req.raw as any);
-
   } catch (e) {
-    // Se não achar, retorna 404 limpo sem estourar erro vermelho no terminal
     return c.notFound();
   }
 });
@@ -192,26 +175,34 @@ app.onError((err, c) => {
 
 export default {
   fetch: app.fetch,
+  // CRON JOB AUTOMÁTICO (A cada 5 minutos)
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(updateTokenPrice(env));
   },
 };
 
+/**
+ * Função Worker que roda em background para manter o preço atualizado
+ * Usa o serviço Moralis com contratos reais ($ASPPBR)
+ */
 async function updateTokenPrice(env: Bindings) {
   try {
-    const response = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd"
-    );
+    // Chama o serviço que configuramos no src/services/market.ts
+    const data = await getTokenMarketData(env);
 
-    if (response.ok) {
-      const data: any = await response.json();
-      const price = data.binancecoin?.usd || 0;
-      if (env.KV_CACHE) {
-        await env.KV_CACHE.put("market:price_usd", price.toString());
-        console.log(`✅ Cron: Preço atualizado para $${price}`);
-      }
+    if (data && env.KV_CACHE) {
+      // 1. Salva o Objeto Completo (Preço, Liquidez, MarketCap)
+      // Útil se você quiser mostrar mais detalhes no futuro
+      await env.KV_CACHE.put("market:data", JSON.stringify(data));
+      
+      // 2. Salva o Preço isolado (Para leitura rápida do Dashboard atual)
+      await env.KV_CACHE.put("market:price_usd", data.price.toString());
+      
+      console.log(`✅ Cron: Mercado atualizado via Moralis. Preço: $${data.price}`);
+    } else {
+      console.warn("⚠️ Cron: Falha ao obter dados da Moralis (Retorno vazio)");
     }
   } catch (error) {
-    console.error("❌ Cron: Falha ao atualizar preço", error);
+    console.error("❌ Cron: Erro crítico na atualização de mercado", error);
   }
 }
