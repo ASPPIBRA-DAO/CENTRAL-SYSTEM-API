@@ -5,7 +5,6 @@ import { createDb, Database } from './db';
 import { error } from './utils/response';
 import { DashboardTemplate } from './views/dashboard';
 import { AuditService } from './services/audit';
-// Importa o serviço de mercado (Agora suporta modos 'full' e 'price_only')
 import { getTokenMarketData } from './services/market';
 
 // --- CORE MODULES ---
@@ -38,7 +37,7 @@ const app = new Hono<AppType>();
 // 1. MIDDLEWARES GLOBAIS
 // =================================================================
 
-// 1.1 CORS
+// 1.1 CORS (Configuração de Segurança Avançada)
 app.use('/*', cors({
   origin: (origin) => {
     const allowedOrigins = [
@@ -56,7 +55,7 @@ app.use('/*', cors({
   credentials: true,
 }));
 
-// 1.2 Database Injection
+// 1.2 Database Injection (Injeção de Dependência)
 app.use(async (c, next) => {
   try {
     const db = createDb(c.env.DB);
@@ -67,13 +66,13 @@ app.use(async (c, next) => {
   }
 });
 
-// 1.3 Audit & Telemetry (PRODUÇÃO)
+// 1.3 Audit & Telemetry (Monitoramento de Performance e Segurança)
 app.use('*', async (c, next) => {
   const start = Date.now();
-  
   await next(); 
 
   const path = c.req.path;
+  // Ignora logs de arquivos estáticos e monitoramento de saúde
   if (!path.match(/\.(css|js|png|jpg|ico|json|map)$/) && !path.startsWith('/monitoring')) {
     const audit = new AuditService(c.env);
     const executionTime = Date.now() - start;
@@ -143,16 +142,14 @@ app.route('/api/auth', authRouter);
 app.route('/api/auth', sessionRouter);
 app.route('/api/health', healthRouter);
 app.route('/api/webhooks', webhooksRouter);
-
 app.route('/api/payments', paymentsRouter);
 app.route('/api/storage', storageRouter);
-
 app.route('/api/agro', agroRouter);
 app.route('/api/rwa', rwaRouter);
 app.route('/api/posts', postsRouter);
 
 // =================================================================
-// 4. ARQUIVOS ESTÁTICOS
+// 4. ARQUIVOS ESTÁTICOS (Cloudflare Assets)
 // =================================================================
 app.get('/*', async (c) => {
   try {
@@ -176,67 +173,65 @@ app.onError((err, c) => {
 export default {
   fetch: app.fetch,
   
-  // CRON JOB AUTOMÁTICO (Configurado para rodar a cada 5 min no Wrangler)
+  /**
+   * CRON JOB AUTOMÁTICO (Wrangler Config)
+   * Dispara a atualização de mercado seguindo o trigger definido no wrangler.jsonc.
+   */
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(updateTokenPrice(env));
   },
 };
 
 /**
- * Função de Atualização Híbrida (Smart Update)
- * - A cada 5 min: Atualiza apenas o PREÇO (Baixo custo API)
- * - A cada 1 hora: Atualiza GRÁFICO e LIQUIDEZ (Alto custo API)
+ * Função de Atualização Inteligente (Smart Update)
+ * - 'price_only': Atualiza apenas os números rápidos (Preço, Variação).
+ * - 'full': Atualiza o pacote completo, incluindo gráfico de 30 dias.
  */
 async function updateTokenPrice(env: Bindings) {
-  try {
-    const KV_KEY_DATA = "market:data";
-    const KV_KEY_LAST_FULL = "market:last_full_sync";
+  const KV_KEY_DATA = "market:data";
+  const KV_KEY_LAST_FULL = "market:last_full_sync";
 
-    // 1. Verifica quando foi a última atualização COMPLETA
+  try {
+    // 1. Determinação do Modo de Execução
     const lastFullSyncStr = await env.KV_CACHE.get(KV_KEY_LAST_FULL);
     const lastFullSync = lastFullSyncStr ? parseInt(lastFullSyncStr) : 0;
     const now = Date.now();
     
-    // Se passou mais de 1 hora (3600000 ms) ou nunca rodou, faz FULL update.
+    // Executa o modo 'full' a cada 1 hora ou na primeira execução
     const isFullUpdateNeeded = (now - lastFullSync) > 3600000;
     const mode = isFullUpdateNeeded ? 'full' : 'price_only';
 
-    // 2. Chama o serviço da Moralis com o modo correto
+    // 2. Aquisição de Dados (Via market service)
     const newData = await getTokenMarketData(env, mode);
 
     if (!newData) {
-      console.warn("⚠️ Cron: Falha ao obter dados da Moralis");
+      console.warn(`⚠️ Cron: Falha ao obter dados no modo ${mode}`);
       return;
     }
 
     let finalData;
 
     if (mode === 'full') {
-      // CENÁRIO A: Atualização Completa (Gráfico, Liq, Preço)
-      // Substitui tudo e atualiza o timestamp da última sync completa
-      finalData = newData;
+      // Substituição completa do estado (Inclui histórico OHLCV)
+      finalData = { ...newData, lastUpdated: new Date().toISOString() };
       await env.KV_CACHE.put(KV_KEY_LAST_FULL, now.toString());
-      console.log(`✅ Cron (FULL): Atualização completa (Gráfico 30d). Preço: $${newData.price}`);
-    
+      console.log(`✅ Cron (FULL): Preço e Gráfico atualizados. Preço: $${newData.price}`);
     } else {
-      // CENÁRIO B: Atualização Rápida (Apenas Preço)
-      // Recupera o JSON antigo do Cache para manter o gráfico e liquidez
+      // Merge Inteligente: Mantém o histórico existente mas atualiza os preços e liquidez novos
       const currentCacheRaw = await env.KV_CACHE.get(KV_KEY_DATA);
       const currentCache = currentCacheRaw ? JSON.parse(currentCacheRaw) : {};
       
       finalData = {
-        ...currentCache,        // Mantém histórico, liq, mcap antigos
-        price: newData.price,   // Atualiza preço novo
-        change24h: newData.change24h,
+        ...currentCache,        // Preserva histórico (history) antigo
+        ...newData,             // Sobrescreve price, change24h, liquidity, marketCap
         lastUpdated: new Date().toISOString()
       };
-      console.log(`⚡ Cron (LITE): Apenas preço atualizado. Preço: $${newData.price}`);
+      console.log(`⚡ Cron (LITE): Números rápidos atualizados. Preço: $${newData.price}`);
     }
 
-    // 3. Salva o resultado final no Cache
+    // 3. Persistência no Cache Global
     if (env.KV_CACHE) {
       await env.KV_CACHE.put(KV_KEY_DATA, JSON.stringify(finalData));
-      // Salva também o preço isolado para leituras rápidas
       await env.KV_CACHE.put("market:price_usd", finalData.price.toString());
     }
 

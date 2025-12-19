@@ -3,7 +3,6 @@ import { drizzle } from "drizzle-orm/d1";
 import { audit_logs } from "../db/schema"; 
 import { Bindings } from "../types/bindings";
 
-// Tipos de ações monitoradas
 export type AuditAction = 
   | "LOGIN_ATTEMPT" | "LOGIN_SUCCESS" 
   | "VOTE_CAST" | "PROPOSAL_CREATE"
@@ -33,17 +32,13 @@ export class AuditService {
 
   constructor(env: Bindings) {
     this.db = env.DB;
-    this.kv = env.KV_CACHE || env.KV_AUTH; 
+    this.kv = env.KV_CACHE || env.KV_AUTH;
     this.storage = env.STORAGE;
   }
 
-  /**
-   * ⚡ O MOTOR: Grava no DB (Segurança) e no KV (Dashboard)
-   */
   async log(event: AuditEvent): Promise<void> {
     const tasks: Promise<any>[] = [];
 
-    // 1. Gravação Forense (D1)
     try {
       tasks.push(drizzle(this.db).insert(audit_logs).values({
         actorId: event.actorId || "anon",
@@ -59,89 +54,100 @@ export class AuditService {
       console.error("❌ Audit DB Error:", e);
     }
 
-    // 2. Atualização do Dashboard (KV)
     if (event.status === "success" && this.kv) {
       tasks.push(this.incrementKV("stats:requests_24h", 1));
-      
-      if (event.metrics?.bytesOut) {
-        tasks.push(this.incrementKV("stats:bandwidth_24h", event.metrics.bytesOut));
-      }
-
+      if (event.metrics?.bytesOut) tasks.push(this.incrementKV("stats:bandwidth_24h", event.metrics.bytesOut));
       if (event.metrics?.dbWrites) tasks.push(this.incrementKV("stats:db_writes_24h", event.metrics.dbWrites));
       if (event.metrics?.dbReads) tasks.push(this.incrementKV("stats:db_reads_24h", event.metrics.dbReads));
-
       if (event.country && event.country.length === 2 && event.country !== 'XX') {
         tasks.push(this.incrementKV(`stats:country:${event.country}`, 1));
       }
-      
-      if (event.ip) {
-        tasks.push(this.trackUniqueVisitor(event.ip));
-      }
+      if (event.ip) tasks.push(this.trackUniqueVisitor(event.ip));
     }
 
     await Promise.allSettled(tasks);
   }
 
   /**
-   * 📊 Método para o Dashboard ler os dados
-   * [CORRIGIDO] Agora lê o pacote COMPLETO (Preço + Gráfico + Liquidez)
+   * 🔄 MOTOR DE CONSOLIDAÇÃO (Snapshot)
+   * Este método deve ser chamado APENAS pelo Cron Job no src/index.ts.
+   * Ele realiza a operação custosa de list() uma vez a cada 5 min.
+   */
+  async computeGlobalStats(): Promise<void> {
+    if (!this.kv) return;
+
+    try {
+      const [reqs, bytes, writes, reads, uniques] = await Promise.all([
+        this.kv.get("stats:requests_24h"),
+        this.kv.get("stats:bandwidth_24h"),
+        this.kv.get("stats:db_writes_24h"),
+        this.kv.get("stats:db_reads_24h"),
+        this.kv.get("stats:uniques_24h"),
+      ]);
+
+      const countries = await this.getInternalTopCountries();
+
+      const snapshot = {
+        networkRequests: parseInt(reqs || "0"),
+        processedData: parseInt(bytes || "0"),
+        globalUsers: parseInt(uniques || "0"),
+        dbStats: {
+          queries: parseInt(reads || "0"),
+          mutations: parseInt(writes || "0"),
+        },
+        countries: countries
+      };
+
+      // Salva todas as métricas em uma única chave JSON
+      await this.kv.put("dashboard:snapshot", JSON.stringify(snapshot));
+      console.log("📊 Telemetria consolidada com sucesso no KV.");
+    } catch (e) {
+      console.error("❌ Falha ao consolidar snapshot:", e);
+    }
+  }
+
+  /**
+   * 📊 Entrega Otimizada para o Dashboard
+   * Consome apenas o Snapshot e o Market Data (2 operações de GET).
    */
   async getDashboardMetrics() {
     if (!this.kv) return this.getEmptyMetrics();
 
-    // Busca dados em paralelo
-    const [reqs, bytes, writes, reads, uniques, marketRaw, countries] = await Promise.all([
-      this.kv.get("stats:requests_24h"),
-      this.kv.get("stats:bandwidth_24h"),
-      this.kv.get("stats:db_writes_24h"),
-      this.kv.get("stats:db_reads_24h"),
-      this.kv.get("stats:uniques_24h"),
-      this.kv.get("market:data"), // <--- Lendo o JSON completo da Moralis!
-      this.getTopCountries()
+    // Reduzimos de ~15 operações para apenas 2 leituras simples
+    const [marketRaw, snapshotRaw] = await Promise.all([
+      this.kv.get("market:data"),
+      this.kv.get("dashboard:snapshot")
     ]);
 
-    // Processa os dados de mercado
-    let marketData = { 
-      price: "0.00", 
-      change24h: 0, 
-      liquidity: 0, 
-      marketCap: 0, 
-      history: [] 
-    };
+    const snapshot = snapshotRaw ? JSON.parse(snapshotRaw) : {};
+    let marketData = { price: "0.00", change24h: 0, liquidity: 0, marketCap: 0, history: [] };
 
     if (marketRaw) {
       try {
         const parsed = JSON.parse(marketRaw);
         marketData = {
-          price: parseFloat(parsed.price || "0").toFixed(4),
+          price: Number(parsed.price || 0).toFixed(4),
           change24h: parsed.change24h || 0,
           liquidity: parsed.liquidity || 0,
           marketCap: parsed.marketCap || 0,
           history: parsed.history || []
         };
-      } catch (e) { console.error("Erro parse market data", e); }
+      } catch (e) { console.error("❌ Erro parse market data:", e); }
     }
 
     return {
-      networkRequests: parseInt(reqs || "0"),
-      processedData: parseInt(bytes || "0"),
-      globalUsers: parseInt(uniques || "0"),
-      dbStats: {
-        queries: parseInt(reads || "0"),
-        mutations: parseInt(writes || "0"),
-      },
-      market: marketData, // Retorna o objeto completo para o Frontend desenhar o gráfico
-      countries: countries
+      networkRequests: snapshot.networkRequests || 0,
+      processedData: snapshot.processedData || 0,
+      globalUsers: snapshot.globalUsers || 0,
+      dbStats: snapshot.dbStats || { queries: 0, mutations: 0 },
+      market: marketData,
+      countries: snapshot.countries || []
     };
   }
 
-  // --- MÉTODOS PRIVADOS ---
-
   private getEmptyMetrics() {
     return { 
-      networkRequests: 0, 
-      processedData: 0, 
-      globalUsers: 0, 
+      networkRequests: 0, processedData: 0, globalUsers: 0, 
       dbStats: { queries: 0, mutations: 0 }, 
       market: { price: "0.00", change24h: 0, liquidity: 0, marketCap: 0, history: [] }, 
       countries: [] 
@@ -156,32 +162,26 @@ export class AuditService {
 
   private async trackUniqueVisitor(ip: string) {
     const key = `visitor:${ip}`;
-    const exists = await this.kv.get(key);
-    if (!exists) {
+    if (!(await this.kv.get(key))) {
       await this.kv.put(key, "1", { expirationTtl: 86400 });
       await this.incrementKV("stats:uniques_24h", 1);
     }
   }
 
-  private async getTopCountries() {
-    if (!this.kv) return [];
+  private async getInternalTopCountries() {
     const list = await this.kv.list({ prefix: "stats:country:" });
-    
-    const tasks = list.keys.map(async (key) => {
+    const results = await Promise.all(list.keys.map(async (key) => {
       const val = await this.kv.get(key.name);
-      const code = key.name.replace("stats:country:", ""); 
-      return { code: code, count: parseInt(val || "0") };
-    });
+      return { code: key.name.replace("stats:country:", ""), count: parseInt(val || "0") };
+    }));
 
-    const results = await Promise.all(tasks);
     const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
-
     return results
       .sort((a, b) => b.count - a.count)
       .slice(0, 10)
       .map(item => {
         let name = item.code;
-        try { name = regionNames.of(item.code) || item.code; } catch { name = item.code; }
+        try { name = regionNames.of(item.code) || item.code; } catch { }
         return { code: item.code, country: name, count: item.count };
       });
   }
