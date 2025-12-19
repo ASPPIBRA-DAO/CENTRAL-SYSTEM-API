@@ -27,15 +27,18 @@ export const users = sqliteTable('users', {
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),
   email: text('email').notNull().unique(),
-  password: text('password').notNull(), // Armazena o hash Argon2id
+  password: text('password').notNull(), // Armazena o hash (Bcrypt ou Argon2id)
+
+  // [NOVO] Controle de Verificação de Email
+  emailVerified: integer('email_verified', { mode: 'boolean' }).default(false),
 
   // --- Segurança & MFA ---
-  mfa_secret: text('mfa_secret'), // Segredo TOTP criptografado
+  mfa_secret: text('mfa_secret'), 
   mfa_enabled: integer('mfa_enabled', { mode: 'boolean' }).default(false),
 
   // --- Compliance & Nível de Garantia ---
   kyc_status: text('kyc_status', { enum: ['none', 'pending', 'approved', 'rejected'] }).default('none'),
-  aal_level: integer('aal_level').default(1), // Nível de Garantia de Autenticação (1, 2, 3)
+  aal_level: integer('aal_level').default(1), 
 
   // --- Controle de Acesso & Metadados ---
   role: text('role', { enum: ['citizen', 'admin', 'system'] }).default('citizen'),
@@ -46,6 +49,20 @@ export const users = sqliteTable('users', {
     emailIdx: index('idx_users_email').on(table.email),
     roleIdx: index('idx_users_role').on(table.role),
   };
+});
+
+// === [NOVO] TABELA DE TOKENS DE RECUPERAÇÃO (PASSWORD RESET) ===
+export const password_resets = sqliteTable('password_resets', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    token: text('token').notNull(), // Token único enviado por email
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    used: integer('used', { mode: 'boolean' }).default(false),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => {
+    return {
+        tokenIdx: index('idx_password_resets_token').on(table.token),
+    };
 });
 
 // === TABELA DE CARTEIRAS (IDENTIDADE WEB3) ===
@@ -66,17 +83,14 @@ export const wallets = sqliteTable('wallets', {
 // === TABELA DE LOGS DE AUDITORIA (RASTREABILIDADE) ===
 export const audit_logs = sqliteTable('audit_logs', {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    actorId: text('actor_id'), // ID do usuário ou "system"
-    action: text('action').notNull(), // Ex: 'login', 'create_proposal', 'update_user'
-    resource: text('resource'), // Ex: 'users:123', 'proposals:456'
+    actorId: text('actor_id'), 
+    action: text('action').notNull(), 
+    resource: text('resource'), 
     status: text('status', { enum: ['success', 'failure'] }).default('success'),
     ipAddress: text('ip_address'),
-    
-    // [NOVO] Adicionado para suportar o mapa de tráfego
     country: text('country'), 
-    
     userAgent: text('user_agent'),
-    metadata: text('metadata', { mode: 'json' }), // Contexto adicional
+    metadata: text('metadata', { mode: 'json' }), 
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 }, (table) => {
     return {

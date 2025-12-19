@@ -1,137 +1,163 @@
 const fs = require('fs');
 const path = require('path');
 
-// CONFIGURAÇÕES
-const OUTPUT_FILE = 'RELATORIO_ARQUITETURA.md';
-const IGNORE_DIRS = ['node_modules', '.git', '.wrangler', 'dist', '.cache', '.DS_Store'];
-const CRITICAL_FILES = ['wrangler.jsonc', 'wrangler.toml', 'package.json', 'drizzle.config.ts', 'tsconfig.json', 'src/types/bindings.d.ts'];
 const ROOT_DIR = process.cwd();
+const REPORT_DATE = new Date().toLocaleString();
 
-let reportContent = `# 🕵️ RELATÓRIO DE AUDITORIA - CENTRAL-SYSTEM-API
-Data: ${new Date().toLocaleString()}
-Diretório Raiz: ${ROOT_DIR}
+const REQUIRED_FILES = [
+    'src/db/schema.ts',
+    'src/services/auth.ts',
+    'src/routes/core/auth/index.ts',
+    'src/routes/core/auth/password.ts',
+    'src/validators/auth.ts',
+    'src/utils/auth-guard.ts',
+    'src/services/email.ts'
+];
 
----
+const REQUIRED_DEPS = ['hono', 'drizzle-orm', 'argon2', 'zod'];
+const REQUIRED_ENV = ['JWT_SECRET', 'DB'];
 
-`;
+function runAudit() {
+    console.log('\n🕵️  AUDITORIA DE SISTEMA: GOVERNANCE SYSTEM API (v3.2)');
+    console.log('📅 Relatório gerado em: ' + REPORT_DATE + '\n');
 
-// 1. FUNÇÃO PARA GERAR ÁRVORE DE DIRETÓRIOS
-function generateTree(dir, prefix = '') {
-    let output = '';
-    const files = fs.readdirSync(dir);
-    
-    // Filtra e ordena (pastas primeiro)
-    const filteredFiles = files.filter(f => !IGNORE_DIRS.includes(f));
-    filteredFiles.sort((a, b) => {
-        const aStat = fs.statSync(path.join(dir, a));
-        const bStat = fs.statSync(path.join(dir, b));
-        if (aStat.isDirectory() && !bStat.isDirectory()) return -1;
-        if (!aStat.isDirectory() && bStat.isDirectory()) return 1;
-        return a.localeCompare(b);
-    });
+    let report = {
+        files: { ok: [], missing: [], alerts: [] },
+        dependencies: { missing: [] },
+        env: { missing: [] },
+        todos: [],
+        connections: { isMounted: false }
+    };
 
-    filteredFiles.forEach((file, index) => {
-        const isLast = index === filteredFiles.length - 1;
-        const filePath = path.join(dir, file);
-        const stats = fs.statSync(filePath);
-        
-        const marker = isLast ? '└── ' : '├── ';
-        output += `${prefix}${marker}${file}${stats.isDirectory() ? '/' : ''}\\n`;
-        
-        if (stats.isDirectory()) {
-            const newPrefix = prefix + (isLast ? '    ' : '│   ');
-            output += generateTree(filePath, newPrefix);
-        }
-    });
-    return output;
-}
-
-// 2. FUNÇÃO PARA LER ARQUIVOS CRÍTICOS
-function readCriticalFiles() {
-    let output = '\\n## 2. ⚙️ CONFIGURAÇÕES CRÍTICAS\\n';
-    
-    CRITICAL_FILES.forEach(file => {
-        const fullPath = path.join(ROOT_DIR, file);
-        if (fs.existsSync(fullPath)) {
-            output += '\\n### 📄 ' + file + '\\n```jsonc\\n';
-            try {
-                const content = fs.readFileSync(fullPath, 'utf-8');
-                output += content;
-            } catch (e) {
-                output += `[Erro ao ler arquivo: ${e.message}]`;
+    // 1. Auditoria de Arquivos
+    REQUIRED_FILES.forEach(file => {
+        const filePath = path.join(ROOT_DIR, file);
+        if (fs.existsSync(filePath)) {
+            report.files.ok.push(file);
+            const content = fs.readFileSync(filePath, 'utf8');
+            
+            if (file.indexOf('schema.ts') !== -1 && content.indexOf('Argon2id') !== -1) {
+                const authSvcPath = path.join(ROOT_DIR, 'src/services/auth.ts');
+                if (fs.existsSync(authSvcPath)) {
+                    const authService = fs.readFileSync(authSvcPath, 'utf8');
+                    if (authService.indexOf('argon2') === -1) {
+                        report.files.alerts.push('⚠️ [CONFLITO] Schema cita Argon2id, mas AuthService não usa Argon2.');
+                    }
+                }
             }
-            output += '\\n```\\n';
         } else {
-            output += `\\n### ❌ ${file} (Não encontrado)\\n`;
+            report.files.missing.push(file);
         }
     });
-    return output;
-}
 
-// 3. VERIFICAÇÃO DE SEGURANÇA E AMBIENTE
-function checkEnvironment() {
-    let output = '\\n## 3. 🛡️ VERIFICAÇÃO DE AMBIENTE E SEGURANÇA\\n';
-    
-    const envFile = path.join(ROOT_DIR, '.dev.vars');
-    const gitIgnore = path.join(ROOT_DIR, '.gitignore');
-    
-    output += `- **.dev.vars**: ${fs.existsSync(envFile) ? '✅ Existe (OK)' : '⚠️ NÃO ENCONTRADO (Crítico para dev local)'}\\n`;
-    
-    if (fs.existsSync(gitIgnore)) {
-        const content = fs.readFileSync(gitIgnore, 'utf-8');
-        const ignoresVars = content.includes('.dev.vars');
-        output += `- **.gitignore**: ✅ Existe. \\n  - Ignora .dev.vars? ${ignoresVars ? '✅ Sim' : '⚠️ NÃO (Risco de vazamento de credenciais!)'}\\n`;
-    } else {
-        output += '- **.gitignore**: ⚠️ NÃO ENCONTRADO\\n';
+    // 2. Auditoria de Dependências
+    const pkgPath = path.join(ROOT_DIR, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        const allDeps = Object.assign({}, pkg.dependencies, pkg.devDependencies);
+        REQUIRED_DEPS.forEach(dep => {
+            if (!allDeps[dep]) report.dependencies.missing.push(dep);
+        });
     }
 
-    return output;
+    // 3. Auditoria de Ambiente
+    const envPath = path.join(ROOT_DIR, '.dev.vars');
+    if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        REQUIRED_ENV.forEach(env => {
+            if (envContent.indexOf(env) === -1) report.env.missing.push(env);
+        });
+    } else {
+        report.env.missing.push('.dev.vars');
+    }
+
+    // 4. Auditoria de Conexão
+    const indexPath = path.join(ROOT_DIR, 'src/index.ts');
+    if (fs.existsSync(indexPath)) {
+        const mainIndex = fs.readFileSync(indexPath, 'utf8');
+        if (mainIndex.indexOf('core/auth') !== -1 || mainIndex.indexOf('authRoutes') !== -1) {
+            report.connections.isMounted = true;
+        }
+    }
+
+    // 5. Scanner de TODOs
+    const srcPath = path.join(ROOT_DIR, 'src');
+    if (fs.existsSync(srcPath)) {
+        scanTodos(srcPath, report.todos);
+    }
+
+    printReport(report);
 }
 
-// 4. SCANNER DE DÍVIDA TÉCNICA (TODOs)
-function scanForTodos(dir) {
-    let output = '';
+function scanTodos(dir, todoList) {
     const files = fs.readdirSync(dir);
-
     files.forEach(file => {
-        const filePath = path.join(dir, file);
-        const stats = fs.statSync(filePath);
-
-        if (IGNORE_DIRS.includes(file)) return;
-
-        if (stats.isDirectory()) {
-            output += scanForTodos(filePath);
-        } else if (file.endsWith('.ts') || file.endsWith('.js') || file.endsWith('.jsonc')) {
-            const content = fs.readFileSync(filePath, 'utf-8');
-            const lines = content.split('\\n');
-            lines.forEach((line, index) => {
-                if (line.includes('TODO') || line.includes('FIXME')) {
-                    const relativePath = path.relative(ROOT_DIR, filePath);
-                    output += `- [ ] **${relativePath}:${index + 1}**: \\\`${line.trim()}\\\`\\n`;
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+            scanTodos(fullPath, todoList);
+        } else if (file.endsWith('.ts') || file.endsWith('.js')) {
+            const content = fs.readFileSync(fullPath, 'utf8');
+            const lines = content.split('\n');
+            lines.forEach((line, idx) => {
+                if (line.indexOf('TODO') !== -1 || line.indexOf('FIXME') !== -1) {
+                    const cleanLine = line.replace('\r', '').trim();
+                    todoList.push(path.relative(ROOT_DIR, fullPath) + ' (Linha ' + (idx + 1) + '): ' + cleanLine);
                 }
             });
         }
     });
-    return output;
 }
 
-// === EXECUÇÃO ===
-console.log("🔍 Iniciando auditoria do projeto...");
+function printReport(r) {
+    const divider = "---------------------------------------------------";
+    console.log('📦 INFRAESTRUTURA');
+    console.log('Arquivos: ' + r.files.ok.length + '/' + REQUIRED_FILES.length + ' OK');
+    r.files.missing.forEach(f => console.log('  ❌ FALTANDO: ' + f));
+    
+    console.log('\n💉 DEPENDÊNCIAS');
+    if (r.dependencies.missing.length === 0) {
+        console.log('  ✅ Todas as libs instaladas.');
+    } else {
+        r.dependencies.missing.forEach(d => console.log('  ❌ REQUERIDO: ' + d));
+    }
 
-// Bloco 1: Árvore
-reportContent += '## 1. 🌳 ESTRUTURA DE ARQUIVOS\\n```text\\n' + generateTree(ROOT_DIR) + '\\n```\\n';
+    console.log('\n🔑 AMBIENTE');
+    if (r.env.missing.length === 0) {
+        console.log('  ✅ Configurações completas.');
+    } else {
+        r.env.missing.forEach(e => console.log('  ❌ AUSENTE: ' + e));
+    }
 
-// Bloco 2: Configs
-reportContent += readCriticalFiles();
+    console.log('\n🔗 CONECTIVIDADE');
+    console.log(r.connections.isMounted ? '  ✅ Rotas montadas no index.ts' : '  🚨 ERRO: Rotas não detectadas!');
 
-// Bloco 3: Segurança
-reportContent += checkEnvironment();
+    if (r.files.alerts.length > 0) {
+        console.log('\n⚠️  ALERTAS');
+        r.files.alerts.forEach(a => console.log('  ' + a));
+    }
 
-// Bloco 4: TODOs
-const todos = scanForTodos(ROOT_DIR);
-reportContent += '\\n## 4. 📝 DÍVIDA TÉCNICA (TODOs/FIXMEs)\\n' + (todos ? todos : 'Nenhum TODO encontrado. Código limpo!') + '\\n';
+    if (r.todos.length > 0) {
+        console.log('\n📝 DÍVIDA TÉCNICA');
+        r.todos.forEach(t => console.log('  👉 ' + t));
+    }
 
-// Salvar
-fs.writeFileSync(path.join(ROOT_DIR, OUTPUT_FILE), reportContent);
-console.log(`✅ Relatório gerado com sucesso: ${OUTPUT_FILE}`);
-console.log(`👉 Abra o arquivo ${OUTPUT_FILE} e copie o conteúdo aqui para análise.`);
+    console.log('\n' + divider + '\n🌳 ÁRVORE SRC');
+    console.log(generateTree(path.join(ROOT_DIR, 'src')));
+}
+
+function generateTree(dir, prefix = '') {
+    let results = '';
+    const list = fs.readdirSync(dir);
+    list.forEach((file, index) => {
+        const filePath = path.join(dir, file);
+        const stat = fs.statSync(filePath);
+        const isLast = index === list.length - 1;
+        results += prefix + (isLast ? '└── ' : '├── ') + file + '\n';
+        if (stat.isDirectory()) {
+            results += generateTree(filePath, prefix + (isLast ? '    ' : '│   '));
+        }
+    });
+    return results;
+}
+
+runAudit();

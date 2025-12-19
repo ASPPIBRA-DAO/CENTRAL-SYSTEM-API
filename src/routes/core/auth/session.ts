@@ -19,7 +19,7 @@
 import { Hono } from 'hono';
 import { hash } from 'bcryptjs'; // Função para criptografar senha
 import { zValidator } from '@hono/zod-validator'; // Middleware que conecta Hono + Zod
-import { registerSchema } from '../../../validators/users';
+import { registerSchema } from '../../../validators/auth';
 import { users } from '../../../db/schema';
 import { success, error } from '../../../utils/response';
 import { Database } from '../../../db';
