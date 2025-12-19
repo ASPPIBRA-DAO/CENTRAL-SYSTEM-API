@@ -37,7 +37,7 @@ const app = new Hono<AppType>();
 // 1. MIDDLEWARES GLOBAIS
 // =================================================================
 
-// 1.1 CORS (Configuração de Segurança Avançada)
+// 1.1 CORS
 app.use('/*', cors({
   origin: (origin) => {
     const allowedOrigins = [
@@ -55,7 +55,7 @@ app.use('/*', cors({
   credentials: true,
 }));
 
-// 1.2 Database Injection (Injeção de Dependência)
+// 1.2 Database Injection
 app.use(async (c, next) => {
   try {
     const db = createDb(c.env.DB);
@@ -66,16 +66,18 @@ app.use(async (c, next) => {
   }
 });
 
-// 1.3 Audit & Telemetry (Monitoramento de Performance e Segurança)
+// 1.3 Audit & Telemetry 2.0 (Captura Inteligente Cloudflare)
 app.use('*', async (c, next) => {
   const start = Date.now();
+  const audit = new AuditService(c.env);
+  
   await next(); 
 
   const path = c.req.path;
-  // Ignora logs de arquivos estáticos e monitoramento de saúde
+  // Filtra arquivos estáticos e rotas de monitoramento interno
   if (!path.match(/\.(css|js|png|jpg|ico|json|map)$/) && !path.startsWith('/monitoring')) {
-    const audit = new AuditService(c.env);
     const executionTime = Date.now() - start;
+    const cf = (c.req.raw as any).cf;
 
     c.executionCtx.waitUntil(
       audit.log({
@@ -87,7 +89,10 @@ app.use('*', async (c, next) => {
         metadata: {
           path: path,
           method: c.req.method,
-          executionTimeMs: executionTime
+          executionTimeMs: executionTime,
+          asn: cf?.asn,        
+          colo: cf?.colo,      
+          city: cf?.city       
         },
         metrics: {
           dbReads: c.req.method === 'GET' ? 1 : 0,
@@ -103,13 +108,15 @@ app.use('*', async (c, next) => {
 // 2. ROTAS DE DASHBOARD E MONITORAMENTO
 // =================================================================
 
-app.get('/', (c) => {
+app.get('/', async (c) => {
   const url = new URL(c.req.url);
   const isLocal = url.hostname.includes('localhost') || url.hostname.includes('127.0.0.1');
   const domain = isLocal ? url.origin : "https://api.asppibra.com";
   const imageUrl = `${domain}/img/social-preview.png`;
 
   const audit = new AuditService(c.env);
+  const metrics = await audit.getDashboardMetrics();
+
   c.executionCtx.waitUntil(audit.log({
     action: "DASHBOARD_VIEW",
     ip: c.req.header("cf-connecting-ip") || "unknown",
@@ -117,10 +124,11 @@ app.get('/', (c) => {
     status: "success"
   }));
 
+  // RESOLUÇÃO ERRO TS2339: O audit.ts deve exportar DashboardMetrics
   return c.html(DashboardTemplate({
     version: "1.1.0",
     service: "Central System API",
-    cacheRatio: "98.5%",
+    cacheRatio: (metrics as any).cacheRatio || "0%", 
     domain: domain,
     imageUrl: imageUrl
   }));
@@ -137,7 +145,6 @@ app.get('/monitoring', (c) => c.redirect('/api/health'));
 // =================================================================
 // 3. API & ROTAS MODULARES
 // =================================================================
-
 app.route('/api/auth', authRouter);
 app.route('/api/auth', sessionRouter);
 app.route('/api/health', healthRouter);
@@ -149,12 +156,16 @@ app.route('/api/rwa', rwaRouter);
 app.route('/api/posts', postsRouter);
 
 // =================================================================
-// 4. ARQUIVOS ESTÁTICOS (Cloudflare Assets)
+// 4. ARQUIVOS ESTÁTICOS
 // =================================================================
 app.get('/*', async (c) => {
   try {
-    if (new URL(c.req.url).pathname === '/') return c.notFound();
-    return await c.env.ASSETS.fetch(c.req.raw as any);
+    const url = new URL(c.req.url);
+    if (url.pathname === '/') return c.notFound();
+    
+    // RESOLUÇÃO ERRO TS2769: Cast para unknown e Response resolve o conflito de tipos
+    const response = await c.env.ASSETS.fetch(c.req.raw as any);
+    return response as unknown as Response;
   } catch (e) {
     return c.notFound();
   }
@@ -173,69 +184,51 @@ app.onError((err, c) => {
 export default {
   fetch: app.fetch,
   
-  /**
-   * CRON JOB AUTOMÁTICO (Wrangler Config)
-   * Dispara a atualização de mercado seguindo o trigger definido no wrangler.jsonc.
-   */
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    ctx.waitUntil(updateTokenPrice(env));
+    ctx.waitUntil((async () => {
+      await updateTokenPrice(env);
+      const audit = new AuditService(env);
+      await audit.computeGlobalStats();
+    })());
   },
 };
 
-/**
- * Função de Atualização Inteligente (Smart Update)
- * - 'price_only': Atualiza apenas os números rápidos (Preço, Variação).
- * - 'full': Atualiza o pacote completo, incluindo gráfico de 30 dias.
- */
 async function updateTokenPrice(env: Bindings) {
   const KV_KEY_DATA = "market:data";
   const KV_KEY_LAST_FULL = "market:last_full_sync";
 
   try {
-    // 1. Determinação do Modo de Execução
     const lastFullSyncStr = await env.KV_CACHE.get(KV_KEY_LAST_FULL);
     const lastFullSync = lastFullSyncStr ? parseInt(lastFullSyncStr) : 0;
     const now = Date.now();
     
-    // Executa o modo 'full' a cada 1 hora ou na primeira execução
     const isFullUpdateNeeded = (now - lastFullSync) > 3600000;
     const mode = isFullUpdateNeeded ? 'full' : 'price_only';
 
-    // 2. Aquisição de Dados (Via market service)
     const newData = await getTokenMarketData(env, mode);
-
-    if (!newData) {
-      console.warn(`⚠️ Cron: Falha ao obter dados no modo ${mode}`);
-      return;
-    }
+    if (!newData) return;
 
     let finalData;
-
     if (mode === 'full') {
-      // Substituição completa do estado (Inclui histórico OHLCV)
       finalData = { ...newData, lastUpdated: new Date().toISOString() };
       await env.KV_CACHE.put(KV_KEY_LAST_FULL, now.toString());
-      console.log(`✅ Cron (FULL): Preço e Gráfico atualizados. Preço: $${newData.price}`);
     } else {
-      // Merge Inteligente: Mantém o histórico existente mas atualiza os preços e liquidez novos
       const currentCacheRaw = await env.KV_CACHE.get(KV_KEY_DATA);
       const currentCache = currentCacheRaw ? JSON.parse(currentCacheRaw) : {};
       
       finalData = {
-        ...currentCache,        // Preserva histórico (history) antigo
-        ...newData,             // Sobrescreve price, change24h, liquidity, marketCap
+        ...currentCache,
+        ...newData,
         lastUpdated: new Date().toISOString()
       };
-      console.log(`⚡ Cron (LITE): Números rápidos atualizados. Preço: $${newData.price}`);
     }
 
-    // 3. Persistência no Cache Global
     if (env.KV_CACHE) {
       await env.KV_CACHE.put(KV_KEY_DATA, JSON.stringify(finalData));
       await env.KV_CACHE.put("market:price_usd", finalData.price.toString());
     }
 
   } catch (error) {
-    console.error("❌ Cron: Erro crítico na atualização de mercado", error);
+    console.error("❌ Cron: Erro na atualização de mercado", error);
   }
 }

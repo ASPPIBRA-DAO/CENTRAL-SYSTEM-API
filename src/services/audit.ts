@@ -3,6 +3,29 @@ import { drizzle } from "drizzle-orm/d1";
 import { audit_logs } from "../db/schema"; 
 import { Bindings } from "../types/bindings";
 
+/**
+ * 📝 Interface para garantir que o TypeScript reconheça todas as métricas
+ * Resolve o erro TS2339 no index.ts
+ */
+export interface DashboardMetrics {
+  networkRequests: number;
+  processedData: number;
+  globalUsers: number;
+  cacheRatio: string;
+  dbStats: {
+    queries: number;
+    mutations: number;
+  };
+  market: {
+    price: string;
+    change24h: number;
+    liquidity: number;
+    marketCap: number;
+    history: any[];
+  };
+  countries: any[];
+}
+
 export type AuditAction = 
   | "LOGIN_ATTEMPT" | "LOGIN_SUCCESS" 
   | "VOTE_CAST" | "PROPOSAL_CREATE"
@@ -17,6 +40,7 @@ export type AuditEvent = {
   country?: string;
   userAgent?: string;
   status: "success" | "failure";
+  isCacheHit?: boolean; // Novo: Identifica se a requisição foi servida pelo cache
   metadata?: Record<string, any>;
   metrics?: {
     dbWrites?: number;
@@ -56,6 +80,13 @@ export class AuditService {
 
     if (event.status === "success" && this.kv) {
       tasks.push(this.incrementKV("stats:requests_24h", 1));
+      
+      // Lógica de Cache Ratio: Incrementa total e hits se aplicável
+      tasks.push(this.incrementKV("stats:cache_total", 1));
+      if (event.isCacheHit) {
+        tasks.push(this.incrementKV("stats:cache_hits", 1));
+      }
+
       if (event.metrics?.bytesOut) tasks.push(this.incrementKV("stats:bandwidth_24h", event.metrics.bytesOut));
       if (event.metrics?.dbWrites) tasks.push(this.incrementKV("stats:db_writes_24h", event.metrics.dbWrites));
       if (event.metrics?.dbReads) tasks.push(this.incrementKV("stats:db_reads_24h", event.metrics.dbReads));
@@ -68,22 +99,24 @@ export class AuditService {
     await Promise.allSettled(tasks);
   }
 
-  /**
-   * 🔄 MOTOR DE CONSOLIDAÇÃO (Snapshot)
-   * Este método deve ser chamado APENAS pelo Cron Job no src/index.ts.
-   * Ele realiza a operação custosa de list() uma vez a cada 5 min.
-   */
   async computeGlobalStats(): Promise<void> {
     if (!this.kv) return;
 
     try {
-      const [reqs, bytes, writes, reads, uniques] = await Promise.all([
+      const [reqs, bytes, writes, reads, uniques, hits, total] = await Promise.all([
         this.kv.get("stats:requests_24h"),
         this.kv.get("stats:bandwidth_24h"),
         this.kv.get("stats:db_writes_24h"),
         this.kv.get("stats:db_reads_24h"),
         this.kv.get("stats:uniques_24h"),
+        this.kv.get("stats:cache_hits"),
+        this.kv.get("stats:cache_total")
       ]);
+
+      // Cálculo Dinâmico do Ratio
+      const h = parseInt(hits || "0");
+      const t = parseInt(total || "1");
+      const ratio = ((h / t) * 100).toFixed(1) + "%";
 
       const countries = await this.getInternalTopCountries();
 
@@ -91,6 +124,7 @@ export class AuditService {
         networkRequests: parseInt(reqs || "0"),
         processedData: parseInt(bytes || "0"),
         globalUsers: parseInt(uniques || "0"),
+        cacheRatio: ratio,
         dbStats: {
           queries: parseInt(reads || "0"),
           mutations: parseInt(writes || "0"),
@@ -98,22 +132,19 @@ export class AuditService {
         countries: countries
       };
 
-      // Salva todas as métricas em uma única chave JSON
       await this.kv.put("dashboard:snapshot", JSON.stringify(snapshot));
-      console.log("📊 Telemetria consolidada com sucesso no KV.");
+      console.log("📊 Telemetria consolidada com sucesso.");
     } catch (e) {
       console.error("❌ Falha ao consolidar snapshot:", e);
     }
   }
 
   /**
-   * 📊 Entrega Otimizada para o Dashboard
-   * Consome apenas o Snapshot e o Market Data (2 operações de GET).
+   * 📊 Retorna métricas tipadas para o Dashboard
    */
-  async getDashboardMetrics() {
+  async getDashboardMetrics(): Promise<DashboardMetrics> {
     if (!this.kv) return this.getEmptyMetrics();
 
-    // Reduzimos de ~15 operações para apenas 2 leituras simples
     const [marketRaw, snapshotRaw] = await Promise.all([
       this.kv.get("market:data"),
       this.kv.get("dashboard:snapshot")
@@ -139,15 +170,16 @@ export class AuditService {
       networkRequests: snapshot.networkRequests || 0,
       processedData: snapshot.processedData || 0,
       globalUsers: snapshot.globalUsers || 0,
+      cacheRatio: snapshot.cacheRatio || "0%",
       dbStats: snapshot.dbStats || { queries: 0, mutations: 0 },
       market: marketData,
       countries: snapshot.countries || []
     };
   }
 
-  private getEmptyMetrics() {
+  private getEmptyMetrics(): DashboardMetrics {
     return { 
-      networkRequests: 0, processedData: 0, globalUsers: 0, 
+      networkRequests: 0, processedData: 0, globalUsers: 0, cacheRatio: "0%",
       dbStats: { queries: 0, mutations: 0 }, 
       market: { price: "0.00", change24h: 0, liquidity: 0, marketCap: 0, history: [] }, 
       countries: [] 
