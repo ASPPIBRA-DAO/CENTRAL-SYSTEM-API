@@ -222,8 +222,19 @@ O sistema adota uma estratégia que equilibra privacidade, performance e transpa
 | **D**enial of Service | Rate limiting, edge caching |
 | **E**levation of Privilege | AAL mínimo por ação, roles explícitos |
 
+## 11. Modelo de Ameaças (STRIDE)
+| Categoria | Mitigação |
+| :--- | :--- |
+| **S**poofing | MFA, SIWE, verificação de email |
+| **T**ampering | IPFS (imutabilidade), hash criptográfico |
+| **R**epudiation | Logs forenses e trilhas auditáveis |
+| **I**nformation Disclosure| Criptografia, segregação de dados |
+| **D**enial of Service | Rate limiting, edge caching |
+| **E**levation of Privilege | AAL mínimo por ação, roles explícitos |
+
 ## 12. Diagrama de Arquitetura
-\`\`\`mermaid
+
+```mermaid
 graph TD
 subgraph "Navegador do Usuário"
 A[React App]
@@ -290,10 +301,11 @@ C4 -- Eventos --> F
 C -- Metadados RWA / Propostas --> I
 I -. CID .-> D
 
-\`\`\`
+```
 
 ## 13. Estrutura do Repositório
-\`\`\`
+
+```
 src/
 ├── db/
 │   └── schema.ts            # Users, Sessions, Wallets, Audit Logs
@@ -310,7 +322,7 @@ src/
 │   └── audit.ts             # Logger global de auditoria
 └── utils/
     └── auth-guard.ts        # Middleware de autenticação
-\`\`\`
+```
 
 ## 14. Configuração e Setup
 
@@ -320,11 +332,12 @@ src/
 - Wrangler CLI
 
 ### 14.2. Variáveis de Ambiente (\`.dev.vars\`)
-\`\`\`
+
+```
 JWT_SECRET=super_secret_key
 REFRESH_TOKEN_SECRET=another_secret
 R2_BUCKET_NAME=governance-docs
-\`\`\`
+```
 
 ## 15. Status do Projeto
 🟡 **Em desenvolvimento ativo** — arquitetura de identidade consolidada, pronta para ambientes regulados, DAOs e tokenização de ativos.
