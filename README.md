@@ -3,11 +3,13 @@
 ![Project Status](https://img.shields.io/badge/status-active_development-yellow)
 ![Version](https://img.shields.io/badge/version-v1.2.0-blue)
 ![Build](https://img.shields.io/badge/build-passing-brightgreen)
-![Platform](https://img.shields.io/badge/edge-Cloudflare_Workers-orange)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
+![Edge Computing](https://img.shields.io/badge/edge-Cloudflare_Workers-orange)
 ![D1 Database](https://img.shields.io/badge/persistence-Cloudflare_D1-blue)
 ![Workers KV](https://img.shields.io/badge/cache-Workers_KV-orange)
 ![R2 Storage](https://img.shields.io/badge/storage-Cloudflare_R2-darkblue)
+![IPFS Decentralized](https://img.shields.io/badge/decentralized-IPFS-7b78e8)
 
 O Governance System é uma plataforma de governança institucional e identidade digital, projetada para operar em cenários de DAO, Web3 e RWA (Real World Assets).
 
@@ -221,7 +223,7 @@ O sistema adota uma estratégia que equilibra privacidade, performance e transpa
 | **E**levation of Privilege | AAL mínimo por ação, roles explícitos |
 
 ## 12. Diagrama de Arquitetura
-```mermaid
+\`\`\`mermaid
 graph TD
 subgraph "Navegador do Usuário"
 A[React App]
@@ -288,10 +290,10 @@ C4 -- Eventos --> F
 C -- Metadados RWA / Propostas --> I
 I -. CID .-> D
 
-```
+\`\`\`
 
 ## 13. Estrutura do Repositório
-```
+\`\`\`
 src/
 ├── db/
 │   └── schema.ts            # Users, Sessions, Wallets, Audit Logs
@@ -308,7 +310,7 @@ src/
 │   └── audit.ts             # Logger global de auditoria
 └── utils/
     └── auth-guard.ts        # Middleware de autenticação
-```
+\`\`\`
 
 ## 14. Configuração e Setup
 
@@ -317,12 +319,12 @@ src/
 - pnpm v10+
 - Wrangler CLI
 
-### 14.2. Variáveis de Ambiente (`.dev.vars`)
-```
+### 14.2. Variáveis de Ambiente (\`.dev.vars\`)
+\`\`\`
 JWT_SECRET=super_secret_key
 REFRESH_TOKEN_SECRET=another_secret
 R2_BUCKET_NAME=governance-docs
-```
+\`\`\`
 
 ## 15. Status do Projeto
 🟡 **Em desenvolvimento ativo** — arquitetura de identidade consolidada, pronta para ambientes regulados, DAOs e tokenização de ativos.
