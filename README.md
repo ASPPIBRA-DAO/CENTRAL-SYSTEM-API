@@ -1,5 +1,14 @@
 # 🚀 Governance System: Identidade e Governança Institucional
 
+![Project Status](https://img.shields.io/badge/status-active_development-yellow)
+![Version](https://img.shields.io/badge/version-v1.2.0-blue)
+![Build](https://img.shields.io/badge/build-passing-brightgreen)
+![Platform](https://img.shields.io/badge/edge-Cloudflare_Workers-orange)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![D1 Database](https://img.shields.io/badge/persistence-Cloudflare_D1-blue)
+![Workers KV](https://img.shields.io/badge/cache-Workers_KV-orange)
+![R2 Storage](https://img.shields.io/badge/storage-Cloudflare_R2-darkblue)
+
 O Governance System é uma plataforma de governança institucional e identidade digital, projetada para operar em cenários de DAO, Web3 e RWA (Real World Assets).
 
 ---
@@ -280,7 +289,7 @@ C -- Metadados RWA / Propostas --> I
 I -. CID .-> D
 
 ```
----
+
 ## 13. Estrutura do Repositório
 ```
 src/
