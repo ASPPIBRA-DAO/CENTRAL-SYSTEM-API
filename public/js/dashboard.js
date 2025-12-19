@@ -1,32 +1,30 @@
 /**
- * ASPPIBRA DAO - Dashboard Controller (v8.5 - Performance Optimized)
+ * ASPPIBRA DAO - Dashboard Controller (v8.6 - Enhanced UI)
  * Backend: Cloudflare Workers + D1 + KV Snapshot
  */
 
 const CONFIG = {
     API_STATS: '/api/stats',
-    REFRESH_RATE: 15000, // Ajustado para 15s para preservar cota de leitura do KV
+    REFRESH_RATE: 15000, 
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 ASPPIBRA Dashboard v8.5 Initialized');
+    console.log('🚀 ASPPIBRA Dashboard v8.6 Initialized');
     setupTheme();
     setupMobileMenu();
 
-    // Inicia Loop de Dados Único
     fetchSystemStats();
     setInterval(fetchSystemStats, CONFIG.REFRESH_RATE);
 });
 
 // --- O CÉREBRO DO DASHBOARD ---
 async function fetchSystemStats() {
-    const startTime = performance.now(); // Início da medição de latência
+    const startTime = performance.now();
     
     try {
         const response = await fetch(CONFIG.API_STATS);
         const endTime = performance.now();
         
-        // Atualiza Latência Real (Footer)
         const latency = Math.round(endTime - startTime);
         const latencyEl = document.getElementById('footer-latency');
         if (latencyEl) latencyEl.innerText = `${latency}ms`;
@@ -35,18 +33,15 @@ async function fetchSystemStats() {
 
         const data = await response.json();
         
-        // 1. MÉTRICAS DE INFRAESTRUTURA (Snapshot Consolidado)
         animateValue('lbl-total-requests', data.networkRequests);
         document.getElementById('lbl-total-bytes').innerText = formatBytes(data.processedData);
         animateValue('lbl-uniques', data.globalUsers);
         
-        // 2. CACHE RATIO DINÂMICO
         const cacheEl = document.getElementById('lbl-cache-ratio');
         if (cacheEl && data.cacheRatio) {
             cacheEl.innerText = data.cacheRatio;
         }
 
-        // 3. MÉTRICAS DE BANCO DE DADOS
         const reads = data.dbStats?.queries || 0;
         const writes = data.dbStats?.mutations || 0;
         const totalOps = reads + writes;
@@ -59,12 +54,11 @@ async function fetchSystemStats() {
         updateBar('bar-writes', writes);
         updateBar('bar-workload', totalOps + data.networkRequests);
 
-        // 4. DADOS DE MERCADO (GeckoTerminal)
         if (data.market) {
             updateMarketData(data.market);
         }
 
-        // 5. ORIGEM DO TRÁFEGO (Dados Reais Cloudflare)
+        // 🌍 Atualiza lista de países com bandeiras
         updateCountryList(data.countries);
 
     } catch (error) {
@@ -128,6 +122,41 @@ function renderSparkline(data) {
 }
 
 // --- UTILITÁRIOS ---
+
+/**
+ * Converte código ISO (ex: BR) para Emoji (🇧🇷)
+ */
+function getFlagEmoji(countryCode) {
+    if (!countryCode || countryCode === 'XX') return '🌐';
+    const codePoints = countryCode
+        .toUpperCase()
+        .split('')
+        .map(char => 127397 + char.charCodeAt(0));
+    return String.fromCodePoint(...codePoints);
+}
+
+function updateCountryList(countries) {
+    const list = document.getElementById('list-countries');
+    if (!list) return;
+
+    if (!countries || countries.length === 0) {
+        if (list.children[0]?.className === 'loading') return;
+        list.innerHTML = '<li class="country-item"><span class="loading">Waiting for nodes...</span></li>';
+        return;
+    }
+
+    list.innerHTML = countries.slice(0, 5).map(c => `
+        <li class="country-item">
+            <div class="flag-wrapper">
+                <span class="flag-icon" style="font-size: 1.2rem; margin-right: 8px;">${getFlagEmoji(c.code)}</span>
+                <span class="flag-code" style="margin-right: 8px; opacity: 0.6; font-family: 'JetBrains Mono';">${c.code}</span>
+                <span class="country-name">${c.country}</span>
+            </div>
+            <span class="count">${c.count.toLocaleString()}</span>
+        </li>
+    `).join('');
+}
+
 function animateValue(id, value) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -157,27 +186,6 @@ function formatBytes(bytes) {
 function formatCompact(num) {
     if (!num) return '0';
     return new Intl.NumberFormat('en-US', { notation: "compact", maximumFractionDigits: 1 }).format(num);
-}
-
-function updateCountryList(countries) {
-    const list = document.getElementById('list-countries');
-    if (!list) return;
-
-    if (!countries || countries.length === 0) {
-        if (list.children[0]?.className === 'loading') return;
-        list.innerHTML = '<li class="country-item"><span class="loading">Waiting for nodes...</span></li>';
-        return;
-    }
-
-    list.innerHTML = countries.slice(0, 5).map(c => `
-        <li class="country-item">
-            <div class="flag-wrapper">
-                <span class="flag-code">${c.code}</span>
-                <span class="country-name">${c.country}</span>
-            </div>
-            <span class="count">${c.count.toLocaleString()}</span>
-        </li>
-    `).join('');
 }
 
 // --- TEMA E MOBILE ---
