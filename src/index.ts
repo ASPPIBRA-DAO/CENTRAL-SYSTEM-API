@@ -15,7 +15,12 @@
  *
  * Project: Governance System (ASPPIBRA DAO)
  * Role: Central System API & Identity Provider
+ *
+ * This is the main entry point for the Cloudflare Worker.
+ * It sets up a Hono application, configures global middlewares,
+ * defines routes, and handles scheduled events (CRON).
  */
+
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { Bindings } from './types/bindings';
@@ -55,18 +60,26 @@ const app = new Hono<AppType>();
 // 1. MIDDLEWARES GLOBAIS
 // =================================================================
 
-// 1.1 CORS
+// 1.1 CORS Institucional ASPPIBRA
 app.use('/*', cors({
   origin: (origin) => {
     const allowedOrigins = [
-      'http://localhost:8082', 'http://localhost:3000', 'http://127.0.0.1:8082',
-      'https://asppibra.com', 'https://www.asppibra.com', 'https://api.asppibra.com'
+      'http://localhost:8080', // Porta padrão do seu pnpm dev
+      'https://asppibra.com', 
+      'https://www.asppibra.com', 
+      'https://api.asppibra.com'
     ];
     if (origin && (origin.includes('localhost') || origin.includes('cloudworkstations.dev'))) return origin;
     if (allowedOrigins.includes(origin)) return origin;
-    return origin;
+    return null;
   },
-  allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-admin-key'],
+  allowHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With', 
+    'X-App-ID', // ✅ Essencial para o Audit Log do frontend
+    'x-admin-key'
+  ],
   allowMethods: ['POST', 'GET', 'OPTIONS', 'PUT', 'DELETE'],
   exposeHeaders: ['Content-Length'],
   maxAge: 600,
@@ -161,17 +174,22 @@ app.get('/api/stats', async (c) => {
 app.get('/monitoring', (c) => c.redirect('/api/health'));
 
 // =================================================================
-// 3. API & ROTAS MODULARES
+// 3. API & ROTAS MODULARES (Sincronizadas com o Frontend)
 // =================================================================
-app.route('/api/auth', authRouter);
-app.route('/api/auth', sessionRouter);
-app.route('/api/health', healthRouter);
-app.route('/api/webhooks', webhooksRouter);
-app.route('/api/payments', paymentsRouter);
-app.route('/api/storage', storageRouter);
-app.route('/api/agro', agroRouter);
-app.route('/api/rwa', rwaRouter);
-app.route('/api/posts', postsRouter);
+
+// Agrupamento por camadas conforme arquitetura ASPPIBRA
+app.route('/api/core/auth', authRouter);
+app.route('/api/core/auth', sessionRouter); // Contém a rota /register
+app.route('/api/core/health', healthRouter);
+app.route('/api/core/webhooks', webhooksRouter);
+
+app.route('/api/platform/payments', paymentsRouter);
+app.route('/api/platform/storage', storageRouter);
+app.route('/api/platform/chat', postsRouter); // Mapeado conforme seu axios.ts
+
+app.route('/api/products/agro', agroRouter);
+app.route('/api/products/rwa', rwaRouter);
+app.route('/api/products/posts', postsRouter);
 
 // =================================================================
 // 4. ARQUIVOS ESTÁTICOS

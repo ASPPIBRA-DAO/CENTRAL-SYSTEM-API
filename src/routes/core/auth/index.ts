@@ -25,28 +25,24 @@ import { signUpSchema, loginSchema } from '../../../validators/auth';
 import { AuthService } from '../../../services/auth';
 import { Database } from '../../../db';
 
-// Tipagem para os Bindings do Cloudflare e Variáveis do Hono
 type Bindings = { JWT_SECRET: string; DB: D1Database };
 type Variables = { db: Database };
 
 const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // ----------------------------------------------------------------------
-// Rota de REGISTRO (Sign-Up)
+// Rota de REGISTRO (Agora como /register)
 // ----------------------------------------------------------------------
-auth.post('/sign-up', zValidator('json', signUpSchema), async (c) => {
+auth.post('/register', zValidator('json', signUpSchema), async (c) => {
   const db = c.get('db');
   const body = c.req.valid('json');
 
   try {
-    // 1. Verificar se o email já existe
     const [existingUser] = await db.select().from(users).where(eq(users.email, body.email)).limit(1);
     if (existingUser) return c.json({ error: 'Este email já está em uso' }, 409);
 
-    // 2. Criar Hash da senha
     const passwordHash = await AuthService.hashPassword(body.password);
 
-    // 3. Inserir novo usuário (Usando 'citizen' como default do seu schema)
     const [newUser] = await db.insert(users).values({
       email: body.email,
       password: passwordHash,
@@ -55,7 +51,6 @@ auth.post('/sign-up', zValidator('json', signUpSchema), async (c) => {
       role: 'citizen',
     }).returning();
 
-    // 4. Gerar Token
     const accessToken = await AuthService.generateToken(newUser, c.env.JWT_SECRET);
 
     return c.json({
@@ -63,21 +58,20 @@ auth.post('/sign-up', zValidator('json', signUpSchema), async (c) => {
       user: {
         id: newUser.id,
         email: newUser.email,
-        displayName: `${newUser.firstName} ${newUser.lastName}`,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
         role: newUser.role
       }
     }, 201);
-
   } catch (error) {
-    console.error('Erro no registro:', error);
     return c.json({ error: 'Erro ao criar conta institucional' }, 500);
   }
 });
 
 // ----------------------------------------------------------------------
-// Rota de LOGIN (Sign-In)
+// Rota de LOGIN (Agora como /login)
 // ----------------------------------------------------------------------
-auth.post('/sign-in', zValidator('json', loginSchema), async (c) => {
+auth.post('/login', zValidator('json', loginSchema), async (c) => {
   const db = c.get('db');
   const { email, password } = c.req.valid('json');
 
@@ -90,44 +84,42 @@ auth.post('/sign-in', zValidator('json', loginSchema), async (c) => {
 
     const accessToken = await AuthService.generateToken(user, c.env.JWT_SECRET);
 
-    // 🛡️ AUDITORIA (Conforme seu schema de logs)
-    await db.insert(audit_logs).values({
-      actorId: String(user.id),
-      action: 'login',
-      resource: 'auth/session',
-      status: 'success',
-      ipAddress: c.req.header('cf-connecting-ip') || 'unknown',
-      userAgent: c.req.header('user-agent'),
-    });
+    // Auditoria assíncrona para não atrasar o login
+    c.executionCtx.waitUntil(
+      db.insert(audit_logs).values({
+        actorId: String(user.id),
+        action: 'login',
+        resource: 'auth/session',
+        status: 'success',
+        ipAddress: c.req.header('cf-connecting-ip') || 'unknown',
+        userAgent: c.req.header('user-agent'),
+      })
+    );
 
     return c.json({
       accessToken,
       user: {
         id: user.id,
         email: user.email,
-        displayName: `${user.firstName} ${user.lastName}`,
+        firstName: user.firstName,
+        lastName: user.lastName,
         role: user.role
       }
     });
-
   } catch (error) {
     return c.json({ error: 'Falha na autenticação' }, 500);
   }
 });
 
-// ----------------------------------------------------------------------
-// Rota ME (Perfil atual)
-// ----------------------------------------------------------------------
+// Rota /me permanece a mesma para persistência de sessão
 auth.get('/me', async (c) => {
   const authHeader = c.req.header('Authorization');
   if (!authHeader?.startsWith('Bearer ')) return c.json({ error: 'Não autorizado' }, 401);
 
   const token = authHeader.split(' ')[1];
-
   try {
     const payload = await verify(token, c.env.JWT_SECRET);
     const db = c.get('db');
-    
     const [user] = await db.select().from(users).where(eq(users.id, Number(payload.userId))).limit(1);
 
     if (!user) return c.json({ error: 'Usuário inexistente' }, 401);
@@ -136,9 +128,9 @@ auth.get('/me', async (c) => {
       user: {
         id: user.id,
         email: user.email,
-        displayName: `${user.firstName} ${user.lastName}`,
-        role: user.role,
-        aal_level: user.aal_level
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role
       }
     });
   } catch (e) {

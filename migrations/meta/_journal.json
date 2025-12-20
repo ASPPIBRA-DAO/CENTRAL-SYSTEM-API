@@ -15,6 +15,13 @@
       "when": 1765938164366,
       "tag": "0001_furry_sunspot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1766183999729,
+      "tag": "0002_tearful_jack_murdock",
+      "breakpoints": true
     }
   ]
 }

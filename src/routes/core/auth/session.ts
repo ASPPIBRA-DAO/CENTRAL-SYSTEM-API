@@ -17,64 +17,71 @@
  * Role: Central System API & Identity Provider
  */
 import { Hono } from 'hono';
-import { hash } from 'bcryptjs'; // Função para criptografar senha
-import { zValidator } from '@hono/zod-validator'; // Middleware que conecta Hono + Zod
-import { registerSchema } from '../../../validators/auth';
-import { users } from '../../../db/schema';
+import { hash } from 'bcryptjs';
+import { zValidator } from '@hono/zod-validator';
+import { signUpSchema } from '../../../validators/auth'; // ✅ Corrigido: Nome do export
+import { users, audit_logs } from '../../../db/schema';
 import { success, error } from '../../../utils/response';
 import { Database } from '../../../db';
 import { eq } from 'drizzle-orm';
 
-// Criando uma sub-aplicação Hono só para usuários
-// Isso permite que o 'app' principal saiba que 'db' existe nas variáveis
+// Tipagem do contexto para garantir acesso ao banco D1
 const app = new Hono<{ Variables: { db: Database } }>();
 
+// ----------------------------------------------------------------------
 // Rota: POST /register
+// ----------------------------------------------------------------------
 app.post(
   '/register', 
-  // 1. Validação automática (se falhar, nem entra na função)
-  zValidator('json', registerSchema), 
+  zValidator('json', signUpSchema), // ✅ Corrigido: Usando signUpSchema
   
   async (c) => {
     const db = c.get('db');
-    const data = c.req.valid('json'); // Dados já validados e tipados!
+    const data = c.req.valid('json');
 
     try {
-      // 2. Verificar se email já existe
-      // A query retorna um array, pegamos o primeiro item
-      const existingUser = await db.query.users.findFirst({
-        where: eq(users.email, data.email)
-      });
+      // 1. Verificar se email já existe
+      const existingUser = await db.select().from(users).where(eq(users.email, data.email)).limit(1);
 
-      if (existingUser) {
+      if (existingUser.length > 0) {
         return error(c, 'Este e-mail já está cadastrado.', null, 409);
       }
 
-      // 3. Criptografar a senha (Hash)
-      // O '10' é o custo do processamento (salt rounds)
+      // 2. Criptografar a senha
       const passwordHash = await hash(data.password, 10);
 
-      // 4. Salvar no Banco
-      // O .returning() faz o D1 devolver os dados do usuário criado
+      // 3. Salvar no Banco (Sincronizado com schema.ts)
       const [newUser] = await db.insert(users).values({
-        name: data.name,
+        firstName: data.firstName, // ✅ Corrigido: Campo split
+        lastName: data.lastName,   // ✅ Corrigido: Campo split
         email: data.email,
         password: passwordHash,
-        walletAddress: data.walletAddress,
-        role: 'user',
-        // Campos de governança iniciam padrão (false/0)
+        role: 'citizen',           // ✅ Corrigido: Enum institucional
+        emailVerified: false,
       }).returning({
         id: users.id,
-        name: users.name,
+        firstName: users.firstName,
+        lastName: users.lastName,
         email: users.email,
+        role: users.role,
         createdAt: users.createdAt
+      });
+
+      // 4. Registro de Auditoria Forense
+      await db.insert(audit_logs).values({
+        actorId: String(newUser.id),
+        action: 'register',
+        resource: `users:${newUser.id}`,
+        status: 'success',
+        ipAddress: c.req.header('cf-connecting-ip') || 'unknown',
+        userAgent: c.req.header('user-agent'),
       });
 
       return success(c, newUser, 'Usuário criado com sucesso!', 201);
 
     } catch (err: any) {
-      console.error(err);
-      return error(c, 'Erro ao criar usuário', err.message, 500);
+      console.error('Erro no registro:', err);
+      return error(c, 'Falha ao processar registro institucional', err.message, 500);
     }
   }
 );

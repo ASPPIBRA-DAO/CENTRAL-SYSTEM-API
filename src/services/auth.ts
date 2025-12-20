@@ -16,29 +16,43 @@
  * Project: Governance System (ASPPIBRA DAO)
  * Role: Central System API & Identity Provider
  */
-
-import { hash, verify } from 'argon2';
+import { hash, compare } from 'bcryptjs';
 import { sign } from 'hono/jwt';
 
 export const AuthService = {
-  // Gera Hash da senha
-  async hashPassword(password: string) {
-    return await hash(password);
+  /**
+   * Gera o Hash da senha de forma segura para o Edge.
+   * O custo (salt rounds) 10 é o padrão recomendado para equilíbrio entre segurança e performance.
+   */
+  async hashPassword(password: string): Promise<string> {
+    return await hash(password, 10);
   },
 
-  // Compara senha com Hash
-  async comparePassword(password: string, storedHash: string) {
-    return await verify(storedHash, password);
+  /**
+   * Compara a senha enviada pelo usuário com o Hash armazenado no D1.
+   * Nota: No bcryptjs, a ordem é (senha_plana, hash_armazenado).
+   */
+  async comparePassword(password: string, storedHash: string): Promise<boolean> {
+    try {
+      return await compare(password, storedHash);
+    } catch (err) {
+      console.error('Erro na comparação de hash:', err);
+      return false;
+    }
   },
 
-  // Gera o JWT Access Token
-  async generateToken(user: any, secret: string) {
+  /**
+   * Gera o JWT Access Token para autenticação em múltiplos SaaS.
+   * Inclui o 'role' institucional para controle de acesso (RBAC).
+   */
+  async generateToken(user: any, secret: string): Promise<string> {
     return await sign(
       {
         userId: user.id,
         email: user.email,
-        role: user.role || 'citizen',
-        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 dias
+        role: user.role || 'citizen', // Define 'citizen' como padrão institucional
+        // Expiração definida para 7 dias (em segundos)
+        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
       },
       secret
     );
