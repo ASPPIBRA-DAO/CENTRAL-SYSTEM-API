@@ -32,7 +32,6 @@ import { getTokenMarketData } from './services/market';
 
 // --- CORE MODULES ---
 import authRouter from './routes/core/auth';
-import sessionRouter from './routes/core/auth/session';
 import healthRouter from './routes/core/health';
 import webhooksRouter from './routes/core/webhooks';
 
@@ -179,7 +178,6 @@ app.get('/monitoring', (c) => c.redirect('/api/health'));
 
 // Agrupamento por camadas conforme arquitetura ASPPIBRA
 app.route('/api/core/auth', authRouter);
-app.route('/api/core/auth', sessionRouter); // Contém a rota /register
 app.route('/api/core/health', healthRouter);
 app.route('/api/core/webhooks', webhooksRouter);
 
