@@ -98,3 +98,52 @@ export const audit_logs = sqliteTable('audit_logs', {
         actorIdx: index('idx_audit_logs_actor').on(table.actorId),
     };
 });
+
+// === [NOVO] TABELA DE CONTRATOS (GESTÃO DE ATIVOS & RWA) ===
+export const contracts = sqliteTable('contracts', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    
+    // Detalhes do Ativo
+    description: text('description').notNull(), // Ex: "Lote Condado", "Itaipuaçu"
+    totalValue: integer('total_value').notNull(), // Valor em centavos ou Real (recomenda-se real/float para SQLite)
+    
+    // Configuração de Parcelamento
+    totalInstallments: integer('total_installments'),
+    startDate: integer('start_date', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    
+    // Status do Contrato
+    status: text('status', { enum: ['active', 'completed', 'defaulted', 'transferred'] }).default('active'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => {
+    return {
+        userIdx: index('idx_contracts_user_id').on(table.userId),
+        statusIdx: index('idx_contracts_status').on(table.status),
+    };
+});
+
+// === [NOVO] TABELA DE TRANSAÇÕES (HISTÓRICO DE PAGAMENTOS) ===
+export const transactions = sqliteTable('transactions', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    contractId: integer('contract_id').notNull().references(() => contracts.id, { onDelete: 'cascade' }),
+    
+    amount: integer('amount').notNull(), // Valor pago
+    paymentDate: integer('payment_date', { mode: 'timestamp' }).notNull(),
+    
+    // Controle de Referência (Ex: "11/2025")
+    referencePeriod: text('reference_period'), 
+    
+    type: text('type', { enum: ['sinal', 'parcela', 'acordo', 'taxa', 'extra'] }).notNull(),
+    
+    // Metadados do Pagamento
+    paymentMethod: text('payment_method').default('transfer'), // pix, cash, transfer
+    notes: text('notes'), // Ex: "Desconto pandemia aplicado"
+    
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => {
+    return {
+        contractIdx: index('idx_transactions_contract_id').on(table.contractId),
+        periodIdx: index('idx_transactions_reference').on(table.referencePeriod),
+    };
+});
