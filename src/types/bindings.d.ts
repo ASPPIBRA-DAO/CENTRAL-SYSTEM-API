@@ -1,44 +1,48 @@
 /**
- * Copyright 2025 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
  * Project: Governance System (ASPPIBRA DAO)
- * Role: Central System API & Identity Provider
+ * Role: Type Definitions for Cloudflare Bindings & Hono Variables
+ * Version: 1.1.0
  */
 import { D1Database, R2Bucket, Fetcher, KVNamespace } from "@cloudflare/workers-types";
 
+/**
+ * Bindings: Representam os recursos externos da Cloudflare definidos no wrangler.toml
+ */
 export type Bindings = {
-  // 1. Banco de Dados (D1)
+  // 1. Banco de Dados (D1) - Onde residem os usuários e contratos
   DB: D1Database;
 
-  // 2. Armazenamento de Arquivos (R2)
+  // 2. Armazenamento de Arquivos (R2) - Para imagens de capa e documentos
   STORAGE: R2Bucket;
 
-  // 3. Arquivos Estáticos (Pasta Public)
+  // 3. Arquivos Estáticos - Gerenciados pelo Cloudflare Pages/Workers Assets
   ASSETS: Fetcher;
 
   // 4. Armazenamento de Chave-Valor (KV)
   KV_AUTH: KVNamespace;
   KV_CACHE: KVNamespace;
 
-  // 5. Variáveis de Ambiente e Segredos
+  // 5. Segredos e Chaves de API
   JWT_SECRET: string;
   ZERO_EX_API_KEY: string;
   MORALIS_API_KEY: string;
 
-  // 6. Variáveis do Cloudflare Analytics
+  // 6. Analytics e Gestão Cloudflare
   CLOUDFLARE_ACCOUNT_ID: string;
   CLOUDFLARE_ZONE_ID: string;
   CLOUDFLARE_API_TOKEN: string;
+};
+
+/**
+ * Variables: Representam os dados injetados no contexto da requisição (c.set / c.get)
+ * Essencial para o funcionamento do requireAuth e das rotas protegidas.
+ */
+export type Variables = {
+  user: {
+    id: number;
+    email: string;
+    role: 'citizen' | 'partner' | 'admin' | 'system';
+  };
+  // Instância do banco injetada no middleware global
+  db: import("../db").Database; 
 };

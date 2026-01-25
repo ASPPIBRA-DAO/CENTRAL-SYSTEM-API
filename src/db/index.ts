@@ -1,29 +1,21 @@
 /**
- * Copyright 2025 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
  * Project: Governance System (ASPPIBRA DAO)
- * Role: Central System API & Identity Provider
+ * Role: Database Connection Factory (Drizzle ORM + D1)
+ * Version: 1.1.0
  */
-import { drizzle } from 'drizzle-orm/d1';
+import { drizzle, DrizzleD1Database } from 'drizzle-orm/d1';
 import * as schema from './schema';
 
-// Esta função transforma o banco cru (D1Database) em um banco inteligente (Drizzle)
-// Permite que você faça: db.query.users.findMany()
+/**
+ * Instancia a conexão com o banco de dados D1.
+ * O mapeamento do 'schema' permite o uso da Query API (db.query.users.findFirst)
+ * @param d1 O binding do D1Database vindo do ambiente (c.env.DB)
+ */
 export const createDb = (d1: D1Database) => {
   return drizzle(d1, { schema });
 };
 
-// Tipo utilitário para usarmos em outros lugares se precisar
-export type Database = ReturnType<typeof createDb>;
+/**
+ * Tipo Database para ser utilizado no contexto do Hono (c.set('db', db))
+ */
+export type Database = DrizzleD1Database<typeof schema>;

@@ -1,61 +1,54 @@
 /**
- * Copyright 2025 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Project: Governance System (ASPPIBRA DAO)
+ * Role: Authentication Middleware (JWT Guardian)
+ * Version: 1.1.0 - Strict Context Typing
  */
 
 import { createMiddleware } from 'hono/factory';
 import { verify } from 'hono/jwt';
+import { error } from '../utils/response'; // ✅ Importando seu utilitário de erro padronizado
 
-// ✅ DEFINIÇÃO DE TIPAGEM CORRIGIDA
-// Aqui definimos o que existe no Env (Bindings) e o que existe no Contexto (Variables)
+// Definição global de tipos para o contexto do Middleware
 type AuthEnv = {
   Bindings: {
     JWT_SECRET: string;
   };
   Variables: {
-    user: any; // Agora o Hono sabe que c.set('user', ...) é permitido!
+    user: {
+      id: number;
+      email: string;
+      role: string;
+    };
   };
 };
 
 /**
  * Middleware para proteger rotas privadas.
- * Verifica o Header Authorization: Bearer <token>
+ * Valida o JWT no Header Authorization e injeta o usuário no contexto.
  */
 export const requireAuth = () => createMiddleware<AuthEnv>(async (c, next) => {
   const authHeader = c.req.header('Authorization');
 
+  // Verifica se o cabeçalho Bearer está presente
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return c.json({ 
-      success: false, 
-      message: 'Acesso negado. Token de autenticação ausente.' 
-    }, 401);
+    return error(c, 'Acesso negado. Token de autenticação ausente.', null, 401);
   }
 
   const token = authHeader.split(' ')[1];
 
   try {
+    // Validação do token usando o Secret do wrangler.toml
     const payload = await verify(token, c.env.JWT_SECRET);
     
-    // Injeta os dados do usuário no contexto
-    // O erro sumirá porque definimos 'user' dentro de 'Variables' lá em cima
-    c.set('user', payload);
+    /**
+     * ✅ INJEÇÃO DE DADOS: 
+     * Agora, qualquer rota que use este middleware pode acessar 'const user = c.get("user")'
+     */
+    c.set('user', payload as any);
     
     await next();
   } catch (err) {
-    return c.json({ 
-      success: false, 
-      message: 'Token inválido ou expirado.' 
-    }, 401);
+    // Caso o token tenha sido alterado ou tenha expirado (definimos 7 dias no service)
+    return error(c, 'Sessão expirada ou token inválido. Faça login novamente.', null, 401);
   }
 });

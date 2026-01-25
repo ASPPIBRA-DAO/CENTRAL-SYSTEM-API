@@ -18,7 +18,7 @@
  */
 import { D1Database, KVNamespace, R2Bucket } from "@cloudflare/workers-types";
 import { drizzle } from "drizzle-orm/d1";
-import { audit_logs } from "../db/schema"; 
+import { auditLogs as audit_logs } from "../db/schema"; 
 import { Bindings } from "../types/bindings";
 
 /**
