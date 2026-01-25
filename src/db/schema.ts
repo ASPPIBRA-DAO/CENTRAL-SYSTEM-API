@@ -147,3 +147,54 @@ export const transactions = sqliteTable('transactions', {
         periodIdx: index('idx_transactions_reference').on(table.referencePeriod),
     };
 });
+
+// =========================================================
+// === [NOVO] MÓDULO SOCIALFI (BLOG & NOTÍCIAS) ===
+// =========================================================
+
+export const posts = sqliteTable('posts', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    
+    // Conteúdo Principal
+    title: text('title').notNull(),
+    slug: text('slug').notNull().unique(), // URL amigável (ex: 'nova-parceria-paraty')
+    content: text('content').notNull(),    // HTML ou Markdown
+    coverUrl: text('cover_url'),           // URL da imagem de capa
+    
+    // Metadados
+    category: text('category').default('Geral'),
+    tags: text('tags'), // Pode armazenar array como string JSON se necessário
+    
+    // Métricas de Engajamento
+    totalViews: integer('total_views').default(0),
+    
+    // Relacionamento (Autor)
+    authorId: integer('author_id').references(() => users.id, { onDelete: 'set null' }),
+    
+    // Estado
+    published: integer('published', { mode: 'boolean' }).default(true),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => {
+    return {
+        slugIdx: index('idx_posts_slug').on(table.slug),
+        categoryIdx: index('idx_posts_category').on(table.category),
+        publishedIdx: index('idx_posts_published').on(table.published),
+    };
+});
+
+// === COMENTÁRIOS (INTERAÇÃO SOCIAL) ===
+export const post_comments = sqliteTable('post_comments', {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    
+    // Relacionamentos
+    postId: integer('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
+    userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    
+    content: text('content').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => {
+    return {
+        postIdx: index('idx_comments_post').on(table.postId),
+    };
+});

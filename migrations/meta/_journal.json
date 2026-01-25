@@ -22,6 +22,13 @@
       "when": 1766183999729,
       "tag": "0002_tearful_jack_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1769300787033,
+      "tag": "0003_confused_typhoid_mary",
+      "breakpoints": true
     }
   ]
 }

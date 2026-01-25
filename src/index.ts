@@ -42,7 +42,8 @@ import storageRouter from './routes/platform/storage';
 // --- PRODUCT MODULES ---
 import agroRouter from './routes/products/agro';
 import rwaRouter from './routes/products/rwa';
-import postsRouter from './routes/products/posts';
+// ✅ ATUALIZADO: Importando o novo módulo de Blog
+import blogRouter from './routes/products/blog';
 
 type Variables = {
   db: Database;
@@ -64,6 +65,7 @@ app.use('/*', cors({
   origin: (origin) => {
     const allowedOrigins = [
       'http://localhost:8080', // Porta padrão do seu pnpm dev
+      'http://localhost:3000', // Next.js padrão
       'https://asppibra.com', 
       'https://www.asppibra.com', 
       'https://api.asppibra.com'
@@ -183,11 +185,16 @@ app.route('/api/core/webhooks', webhooksRouter);
 
 app.route('/api/platform/payments', paymentsRouter);
 app.route('/api/platform/storage', storageRouter);
-app.route('/api/platform/chat', postsRouter); // Mapeado conforme seu axios.ts
+
+// Rota antiga de chat (comentada até migração total para SocialFi)
+// app.route('/api/platform/chat', postsRouter); 
 
 app.route('/api/products/agro', agroRouter);
 app.route('/api/products/rwa', rwaRouter);
-app.route('/api/products/posts', postsRouter);
+
+// ✅ NOVA ROTA: SocialFi / Blog
+// Mapeada para responder em /api/posts conforme o Frontend espera
+app.route('/api/posts', blogRouter);
 
 // =================================================================
 // 4. ARQUIVOS ESTÁTICOS
