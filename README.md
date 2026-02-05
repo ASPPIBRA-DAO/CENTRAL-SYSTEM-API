@@ -54,13 +54,18 @@ O Governance System é uma plataforma de governança institucional e identidade 
     * [9.2. Dados Sensíveis](#92-dados-sensíveis-privados)
     * [9.3. Dados de Performance](#93-dados-de-performance-edge-cache)
     * [9.4. Dados Públicos e Imutáveis](#94-dados-públicos-e-imutáveis)
+    * [9.5. Backup e Recuperação de Desastres](#95-backup-e-recuperação-de-desastres)
 * **10. Auditoria, Logs e Compliance**
 * **11. Modelo de Ameaças (STRIDE)**
 * **12. Diagrama de Arquitetura**
 * **13. Estrutura do Repositório**
 * **14. Configuração e Setup**
 * **15. Status do Projeto**
-* **16. Considerações Finais**
+* **16. Governança: O Ciclo de Vida da Proposta**
+* **17. API Reference (Endpoints Principais)**
+* **18. Glossário de Termos**
+* **19. Guia de Contribuição**
+* **20. Considerações Finais**
 
 ---
 
@@ -209,6 +214,9 @@ O sistema adota uma estratégia que equilibra privacidade, performance e transpa
 - **Tecnologia:** IPFS.
 - **Garantia:** Cada publicação no IPFS gera um CID (Content Identifier) que prova matematicamente a imutabilidade do conteúdo.
 
+### 9.5. Backup e Recuperação de Desastres
+A integridade dos dados é garantida por uma política de backup robusta. O Cloudflare D1 oferece replicação automática e backups contínuos. Adicionalmente, metadados críticos (como CIDs do IPFS referentes a propostas e ativos) são espelhados em logs de auditoria, permitindo a reconstrução do estado de governança a partir de fontes imutáveis em um cenário de falha catastrófica.
+
 ## 10. Auditoria, Logs e Compliance
 *Esta seção descreve a estratégia para garantir a rastreabilidade completa das ações e a conformidade com requisitos regulatórios.*
 
@@ -222,19 +230,9 @@ O sistema adota uma estratégia que equilibra privacidade, performance e transpa
 | **D**enial of Service | Rate limiting, edge caching |
 | **E**levation of Privilege | AAL mínimo por ação, roles explícitos |
 
-## 11. Modelo de Ameaças (STRIDE)
-| Categoria | Mitigação |
-| :--- | :--- |
-| **S**poofing | MFA, SIWE, verificação de email |
-| **T**ampering | IPFS (imutabilidade), hash criptográfico |
-| **R**epudiation | Logs forenses e trilhas auditáveis |
-| **I**nformation Disclosure| Criptografia, segregação de dados |
-| **D**enial of Service | Rate limiting, edge caching |
-| **E**levation of Privilege | AAL mínimo por ação, roles explícitos |
-
 ## 12. Diagrama de Arquitetura
 
-```mermaid
+\`\`\`mermaid
 graph TD
 subgraph "Navegador do Usuário"
 A[React App]
@@ -301,11 +299,11 @@ C4 -- Eventos --> F
 C -- Metadados RWA / Propostas --> I
 I -. CID .-> D
 
-```
+\`\`\`
 
 ## 13. Estrutura do Repositório
 
-```
+\`\`\`
 src/
 ├── db/
 │   └── schema.ts            # Users, Sessions, Wallets, Audit Logs
@@ -322,7 +320,7 @@ src/
 │   └── audit.ts             # Logger global de auditoria
 └── utils/
     └── auth-guard.ts        # Middleware de autenticação
-```
+\`\`\`
 
 ## 14. Configuração e Setup
 
@@ -333,14 +331,47 @@ src/
 
 ### 14.2. Variáveis de Ambiente (\`.dev.vars\`)
 
-```
+\`\`\`
 JWT_SECRET=super_secret_key
 REFRESH_TOKEN_SECRET=another_secret
 R2_BUCKET_NAME=governance-docs
-```
+\`\`\`
 
 ## 15. Status do Projeto
 🟡 **Em desenvolvimento ativo** — arquitetura de identidade consolidada, pronta para ambientes regulados, DAOs e tokenização de ativos.
 
-## 16. Considerações Finais
+## 16. Governança: O Ciclo de Vida da Proposta
+O sistema foi projetado para dar suporte completo ao ciclo de vida de uma proposta de governança na DAO:
+1.  **Criação:** Um membro com o AAL e o role adequados cria uma nova proposta, detalhando a ação e seus metadados.
+2.  **Publicação Imutável:** O conteúdo da proposta é publicado no IPFS, gerando um CID (Content Identifier) que garante sua imutabilidade.
+3.  **Registro On-chain (Opcional):** O CID pode ser registrado em um Smart Contract para prova de existência.
+4.  **Votação:** Membros qualificados votam na proposta. Os votos são registrados de forma segura no D1.
+5.  **Tally & Execução:** Ao final do período de votação, o resultado é apurado. Se aprovada, a ação correspondente é executada pelo sistema.
+
+## 17. API Reference (Endpoints Principais)
+A documentação completa da API será disponibilizada via Swagger/OpenAPI. Abaixo, um resumo dos endpoints essenciais:
+
+| Verbo  | Endpoint                       | Descrição                                         | AAL Mín. |
+| :----- | :----------------------------- | :------------------------------------------------ | :------- |
+| `POST` | `/api/core/auth/register`      | Registro de novos usuários.                       | AAL1     |
+| `POST` | `/api/core/auth/login`         | Autenticação e obtenção de token JWT.             | AAL1     |
+| `GET`  | `/api/core/auth/me`            | Retorna o perfil do usuário autenticado.          | AAL1     |
+| `POST` | `/api/posts`                   | Cria um novo post (SocialFi).                     | AAL1     |
+| `POST` | `/api/core/auth/mfa/enable`    | Habilita a autenticação de dois fatores (TOTP).   | AAL1     |
+| `POST` | `/api/core/auth/web3/link`     | Vincula uma carteira Web3 à conta do usuário (SIWE).| AAL2     |
+| `POST` | `/api/products/rwa/contracts`  | Cria um novo contrato de ativo tokenizado.        | AAL3     |
+
+## 18. Glossário de Termos
+| Termo | Descrição |
+| :---- | :--- |
+| **AAL** | (Authentication Assurance Level) Nível de garantia de autenticação que mede a força da identidade de um usuário. |
+| **SIWE**| (Sign-In with Ethereum) Padrão que permite a autenticação de usuários usando suas carteiras Ethereum, provando controle sobre a chave privada. |
+| **RWA** | (Real World Asset) Ativo do mundo real (imóveis, contratos, etc.) que é tokenizado e representado digitalmente na blockchain ou em um sistema como este. |
+| **CID** | (Content Identifier) Endereço único e imutável de um arquivo na rede IPFS, gerado a partir do seu conteúdo. |
+| **DAO** | (Decentralized Autonomous Organization) Organização governada por regras codificadas em smart contracts e controlada por seus membros. |
+
+## 19. Guia de Contribuição
+Este projeto acolhe contribuições da comunidade ASPPIBRA-DAO. Para garantir a qualidade e a consistência do código, por favor, siga as diretrizes detalhadas no arquivo `CONTRIBUTING.md`. O guia inclui informações sobre padrões de código, fluxo de Pull Request e configuração do ambiente de desenvolvimento.
+
+## 20. Considerações Finais
 Este repositório implementa um núcleo soberano de identidade e governança institucional para Web2 + Web3.
