@@ -1,8 +1,7 @@
 # ------------------------------------------------------
 # 🔒 ARQUIVOS DE CONFIGURAÇÃO SENSÍVEIS (BLOQUEADOS)
 # ------------------------------------------------------
-# Contém Account ID, Zone ID e KV IDs. 
-# O usuário optou por não versionar.
+# Contém Account ID, Zone ID e IDs de infraestrutura (D1, KV, R2)
 wrangler.jsonc
 wrangler.toml
 
@@ -10,15 +9,21 @@ wrangler.toml
 .dev.vars
 .dev.vars.*
 .env
-.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 *.pem
 *.key
 
 # ------------------------------------------------------
-# ⚡ Cloudflare Workers
+# ⚡ Cloudflare Workers & Drizzle Meta
 # ------------------------------------------------------
 .wrangler/
 .mf/
+# Opcional: Alguns devs versionam o meta do Drizzle, 
+# mas se você quer um reset limpo no futuro, pode ignorar.
+# migrations/meta/
 
 # ------------------------------------------------------
 # 📦 Dependências & Node.js
@@ -28,30 +33,37 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 .pnpm-store/
+.pnpm-debug.log*
 
 # ------------------------------------------------------
-# 💾 Banco de Dados & Logs
+# 💾 Banco de Dados Local & Logs
 # ------------------------------------------------------
 .d1/
 *.sqlite
 *.sqlite3
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 logs/
 *.log
+/tmp/
 
 # ------------------------------------------------------
 # 🏗️ Build & Output
 # ------------------------------------------------------
 dist/
 build/
+.cache/
 coverage/
 .nyc_output/
 
 # ------------------------------------------------------
-# 🖥️ Sistema
+# 🖥️ Sistema & IDEs
 # ------------------------------------------------------
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+*.sublime-project
+*.sublime-workspace

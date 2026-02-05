@@ -1,40 +1,12 @@
 {
-  "version": "6",
+  "version": "5",
   "dialect": "sqlite",
   "entries": [
     {
       "idx": 0,
       "version": "6",
-      "when": 1764949267993,
-      "tag": "0000_unique_red_hulk",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1765938164366,
-      "tag": "0001_furry_sunspot",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1766183999729,
-      "tag": "0002_tearful_jack_murdock",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1769300787033,
-      "tag": "0003_confused_typhoid_mary",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1770252990388,
-      "tag": "0004_far_warbound",
+      "when": 1770283982819,
+      "tag": "0000_tricky_mandrill",
       "breakpoints": true
     }
   ]
