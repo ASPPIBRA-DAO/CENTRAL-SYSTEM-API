@@ -1,51 +1,40 @@
 /**
- * Copyright 2025 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
  * Project: Governance System (ASPPIBRA DAO)
- * Role: Blog & SocialFi API
+ * Role: Blog & SocialFi API (Unified & Revised)
+ * Version: 2.1.0
  */
 
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { desc, eq, sql } from 'drizzle-orm';
-import { posts, users } from '../../db/schema';
+import { posts, users, postFavorites, auditLogs } from '../../db/schema'; // Import auditLogs
 import { requireAuth } from '../../middleware/auth';
 import { Database } from '../../db';
 
-// Zod Schema para validação da criação de um post
+// Schema Zod para criação/edição, alinhado ao banco de dados
 const createPostSchema = z.object({
-  title: z.string().min(3, "O título deve ter pelo menos 3 caracteres."),
-  content: z.string().min(10, "O conteúdo deve ter pelo menos 10 caracteres."),
-  slug: z.string().regex(/^[a-z0-9-]+$/, "O slug deve conter apenas letras minúsculas, números e hífens."),
+  title: z.string().min(3, "O título é muito curto"),
+  content: z.string().min(10, "O conteúdo é muito curto"),
+  slug: z.string().regex(/^[a-z0-9-]+$/, "Slug inválido"),
+  description: z.string().max(160, "A descrição é muito longa").optional(),
   category: z.string().optional().default('Geral'),
-  coverUrl: z.string().url("URL da imagem de capa inválida.").optional(),
-  tags: z.string().optional(), // JSON string ou separado por vírgula
-  published: z.boolean().optional().default(true),
+  coverUrl: z.string().url("URL da imagem de capa inválida").optional(),
+  tags: z.array(z.string()).optional().default([]),
+  publish: z.boolean().optional().default(true),
+  isFeatured: z.boolean().optional().default(false),
+  isTrending: z.boolean().optional().default(false),
 });
 
-// Definição do tipo de App para o Hono
+// Schema Zod para validar o parâmetro :id
+const postIdSchema = z.object({
+  id: z.string().regex(/^\d+$/, "ID de post inválido").transform(Number),
+});
+
+
 type AppType = {
-  Bindings: {
-    DB: D1Database;
-    JWT_SECRET: string;
-  };
-  Variables: {
-    db: Database;
-    user: { userId: number; role: string };
-  };
+  Bindings: { DB: D1Database; JWT_SECRET: string };
+  Variables: { db: Database; user: { userId: number; role: string } };
 };
 
 const blog = new Hono<AppType>();
@@ -54,97 +43,105 @@ const blog = new Hono<AppType>();
 // 1. ROTAS PÚBLICAS (LEITURA)
 // =================================================================
 
-/**
- * Rota: GET /api/posts
- * Retorna uma lista paginada de posts publicados.
- */
 blog.get('/', async (c) => {
   const db = c.get('db');
   
   try {
-    const publishedPosts = await db
+    const data = await db
       .select({
         id: posts.id,
         title: posts.title,
         slug: posts.slug,
-        category: posts.category,    // [NOVO] Importante para o filtro do Front
+        description: posts.description,
+        category: posts.category,
         coverUrl: posts.coverUrl,
-        totalViews: posts.totalViews, // [NOVO] Para mostrar métricas
-        published: posts.published,
+        totalViews: posts.totalViews,
+        totalFavorites: posts.totalFavorites,
+        isFeatured: posts.isFeatured,
+        isTrending: posts.isTrending,
+        publish: posts.publish,
         createdAt: posts.createdAt,
         author: {
           id: users.id,
-          name: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
+          name: sql<string>`${users.firstName} || \' \' || ${users.lastName}`,
+          avatarUrl: users.avatarUrl,
         },
       })
       .from(posts)
       .leftJoin(users, eq(posts.authorId, users.id))
-      // ✅ CORREÇÃO: Mudado de 'isPublished' para 'published' (nome real da coluna)
-      .where(eq(posts.published, true)) 
+      .where(eq(posts.publish, true)) 
       .orderBy(desc(posts.createdAt))
-      .limit(20); // Aumentei o limite padrão
+      .limit(30);
 
-    return c.json({ success: true, data: publishedPosts });
+    return c.json({ success: true, data });
   } catch (error) {
-    console.error("Erro ao buscar posts:", error);
-    return c.json({ success: false, message: 'Não foi possível recuperar os posts.' }, 500);
+    console.error("Erro ao buscar feed:", error);
+    return c.json({ success: false, message: 'Erro ao buscar feed.' }, 500);
   }
 });
 
-/**
- * Rota: GET /api/posts/:slug
- * Retorna um post específico pelo seu slug.
- */
 blog.get('/:slug', async (c) => {
-    const db = c.get('db');
-    const slug = c.req.param('slug');
+  const db = c.get('db');
+  const slug = c.req.param('slug');
 
-    try {
-        const [post] = await db
-            .select({
-                id: posts.id,
-                title: posts.title,
-                content: posts.content,
-                slug: posts.slug,
-                category: posts.category,
-                tags: posts.tags,
-                coverUrl: posts.coverUrl,
-                totalViews: posts.totalViews,
-                published: posts.published,
-                createdAt: posts.createdAt,
-                author: {
-                    id: users.id,
-                    name: sql<string>`${users.firstName} || ' ' || ${users.lastName}`,
-                },
-            })
-            .from(posts)
-            .leftJoin(users, eq(posts.authorId, users.id))
-            .where(eq(posts.slug, slug));
-        
-        if (!post) {
-            return c.json({ success: false, message: 'Post não encontrado' }, 404);
-        }
+  try {
+    const [post] = await db
+      .select({
+        id: posts.id,
+        title: posts.title,
+        content: posts.content,
+        description: posts.description,
+        slug: posts.slug,
+        category: posts.category,
+        tags: posts.tags,
+        coverUrl: posts.coverUrl,
+        totalViews: posts.totalViews,
+        totalFavorites: posts.totalFavorites,
+        createdAt: posts.createdAt,
+        author: {
+          id: users.id,
+          name: sql<string>`${users.firstName} || \' \' || ${users.lastName}`,
+          avatarUrl: users.avatarUrl,
+        },
+      })
+      .from(posts)
+      .leftJoin(users, eq(posts.authorId, users.id))
+      .where(eq(posts.slug, slug));
+    
+    if (!post) return c.json({ success: false, message: 'Post não encontrado' }, 404);
 
-        return c.json({ success: true, data: post });
+    const favorites = await db
+      .select({
+        name: sql<string>`${users.firstName}`,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(postFavorites)
+      .leftJoin(users, eq(postFavorites.userId, users.id))
+      .where(eq(postFavorites.postId, post.id))
+      .limit(5);
 
-    } catch (error) {
-        console.error(`Erro ao buscar o post [${slug}]:`, error);
-        return c.json({ success: false, message: 'Não foi possível recuperar o post.' }, 500);
-    }
+    c.executionCtx.waitUntil(
+      db.update(posts)
+        .set({ totalViews: sql`${posts.totalViews} + 1` })
+        .where(eq(posts.id, post.id))
+    );
+
+    // Drizzle/D1 com modo 'json' já faz o parse, então 'tags' deve ser um array.
+    return c.json({ success: true, data: { ...post, favoritePerson: favorites } });
+
+  } catch (error) {
+    console.error(`Erro ao carregar artigo [${slug}]:`, error);
+    return c.json({ success: false, message: 'Erro ao carregar artigo.' }, 500);
+  }
 });
 
-
 // =================================================================
-// 2. ROTAS PRIVADAS (ESCRITA)
+// 2. ROTAS PRIVADAS (Ações SocialFi & Escrita)
 // =================================================================
 
-// Aplica o middleware de autenticação para todas as rotas de escrita abaixo
 blog.use('/*', requireAuth());
 
-/**
- * Rota: POST /api/posts
- * Cria um novo post no blog. Requer autenticação.
- */
+// Criar Post
 blog.post('/', zValidator('json', createPostSchema), async (c) => {
   const db = c.get('db');
   const user = c.get('user');
@@ -154,17 +151,52 @@ blog.post('/', zValidator('json', createPostSchema), async (c) => {
     const [newPost] = await db.insert(posts).values({
       ...postData,
       authorId: user.userId,
-      // O campo createdAt é preenchido automaticamente pelo banco
     }).returning();
+
+    // 🟢 AUDITORIA FORENSE
+    c.executionCtx.waitUntil(
+      db.insert(auditLogs).values({
+        actorId: user.userId,
+        action: 'BLOG_POST_CREATE',
+        status: 'success',
+        ipAddress: c.req.header('cf-connecting-ip') || 'unknown',
+        metadata: { postId: newPost.id, slug: newPost.slug }
+      })
+    );
 
     return c.json({ success: true, data: newPost }, 201);
   } catch (error: any) {
-    // Verifica erro de constraint (slug duplicado)
-    if (error.message?.includes('UNIQUE constraint failed') || error.message?.includes('posts.slug')) {
-        return c.json({ success: false, message: 'Este slug já está em uso. Por favor, escolha outro.' }, 409);
-    }
     console.error("Erro ao criar post:", error);
-    return c.json({ success: false, message: 'Não foi possível criar o post. Verifique os dados.' }, 500);
+    // Erro de slug duplicado
+    if (error.message?.includes('UNIQUE constraint failed: posts.slug')) {
+        return c.json({ success: false, message: 'Este slug já está em uso.'}, 409);
+    }
+    return c.json({ success: false, message: 'Não foi possível criar o post.' }, 500);
+  }
+});
+
+// Favoritar Post
+blog.post('/:id/favorite', zValidator('param', postIdSchema), async (c) => {
+  const db = c.get('db');
+  const userId = c.get('user').userId;
+  const { id: postId } = c.req.valid('param');
+
+  try {
+    await db.insert(postFavorites).values({ userId, postId });
+    
+    c.executionCtx.waitUntil(
+        db.update(posts)
+          .set({ totalFavorites: sql`${posts.totalFavorites} + 1` })
+          .where(eq(posts.id, postId))
+    );
+
+    return c.json({ success: true, message: 'Favoritado com sucesso!' });
+  } catch (error: any) {
+    if (error.message?.includes('UNIQUE constraint failed')) {
+      return c.json({ success: false, message: 'Você já favoritou este post.' }, 409);
+    }
+    console.error(`Erro ao favoritar post [${postId}]:`, error);
+    return c.json({ success: false, message: 'Não foi possível completar a ação.' }, 500);
   }
 });
 
