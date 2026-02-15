@@ -21,30 +21,70 @@ import { Bindings } from '../../types/bindings';
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// 1. Health Check Simples (Ping)
-app.get('/', (c) => {
-  return c.json({
+// 1. Health Check Inteligente (Ping + Service Discovery)
+app.get('/', async (c) => {
+  const servicesParam = c.req.query('services');
+  
+  const report: any = {
     status: 'ok',
     system: 'CENTRAL-SYSTEM-API',
     timestamp: new Date().toISOString()
-  });
+  };
+
+  // Se o parâmetro ?services=all for passado, realiza checagem profunda
+  if (servicesParam === 'all') {
+    const checks: any = {};
+    let hasError = false;
+
+    // --- Verificação D1 (Database) ---
+    try {
+      // Tenta uma query real em vez de apenas verificar a instância
+      await c.env.DB.prepare('SELECT 1').first();
+      checks.database = { status: 'healthy', type: 'D1' };
+    } catch (e: any) {
+      checks.database = { status: 'unhealthy', error: e.message };
+      hasError = true;
+    }
+
+    // --- Verificação KV (Cache/Config) ---
+    try {
+      // Tenta listar chaves (operação leve)
+      await c.env.KV_CACHE.list({ limit: 1 });
+      checks.cache = { status: 'healthy', type: 'KV' };
+    } catch (e: any) {
+      checks.cache = { status: 'unhealthy', error: e.message };
+      hasError = true;
+    }
+
+    // --- Verificação R2 (Storage) ---
+    try {
+      // Tenta listar objetos no bucket
+      await c.env.STORAGE.list({ limit: 1 });
+      checks.storage = { status: 'healthy', type: 'R2' };
+    } catch (e: any) {
+      checks.storage = { status: 'unhealthy', error: e.message };
+      hasError = true;
+    }
+
+    report.details = checks;
+    if (hasError) report.status = 'partial_error';
+  }
+
+  return c.json(report, report.status === 'ok' ? 200 : 207);
 });
 
-// 2. Health Check do Banco de Dados
+// 2. Health Check Dedicado do Banco de Dados
 app.get('/db', async (c) => {
-  // Como o middleware global já injetou o DB, se chegou aqui, o DB instanciou.
-  // Podemos fazer uma query simples para garantir.
   try {
-    const db = c.get('db' as any); // Recupera do contexto
-    // Opcional: const result = await db.run(sql`SELECT 1`);
-    return c.json({ status: 'ok', message: 'DB Connected' });
+    // Executa teste real de leitura
+    await c.env.DB.prepare('SELECT 1').first();
+    return c.json({ status: 'ok', message: 'DB Connected and Responsive' });
   } catch (e: any) {
     return c.json({ status: 'error', message: e.message }, 500);
   }
 });
 
 // 3. Monitoramento Avançado (Cloudflare GraphQL)
-// Movido do index.ts antigo para cá
 app.get('/analytics', async (c) => {
   const accountId = c.env.CLOUDFLARE_ACCOUNT_ID;
   const zoneId = c.env.CLOUDFLARE_ZONE_ID;
@@ -60,24 +100,25 @@ app.get('/analytics', async (c) => {
   const isoEnd = now.toISOString();
   const dateStart = isoStart.split('T')[0];
 
+  // Query otimizada para Cloudflare GraphQL
   const query = `
-    query {
+    query GetAnalytics($accountId: String!, $zoneId: String!, $start: String!, $end: DateTime!, $dateStart: Date!) {
       viewer {
-        accounts(filter: { accountTag: "${accountId}" }) {
-          d1: d1AnalyticsAdaptiveGroups(limit: 1, filter: { date_geq: "${dateStart}" }) {
+        accounts(filter: { accountTag: $accountId }) {
+          d1: d1AnalyticsAdaptiveGroups(limit: 1, filter: { date_geq: $dateStart }) {
             sum { readQueries, writeQueries }
           }
         }
-        zones(filter: { zoneTag: "${zoneId}" }) {
-          traffic: httpRequestsAdaptiveGroups(limit: 1, filter: { datetime_geq: "${isoStart}", datetime_lt: "${isoEnd}" }) {
+        zones(filter: { zoneTag: $zoneId }) {
+          traffic: httpRequestsAdaptiveGroups(limit: 1, filter: { datetime_geq: $start, datetime_lt: $end }) {
             count
             sum { edgeResponseBytes }
           }
-          cache: httpRequestsAdaptiveGroups(limit: 5, filter: { datetime_geq: "${isoStart}", datetime_lt: "${isoEnd}" }, orderBy: [count_DESC]) {
+          cache: httpRequestsAdaptiveGroups(limit: 5, filter: { datetime_geq: $start, datetime_lt: $end }, orderBy: [count_DESC]) {
             count
             dimensions { cacheStatus }
           }
-          countries: httpRequestsAdaptiveGroups(limit: 5, filter: { datetime_geq: "${isoStart}", datetime_lt: "${isoEnd}" }, orderBy: [count_DESC]) {
+          countries: httpRequestsAdaptiveGroups(limit: 5, filter: { datetime_geq: $start, datetime_lt: $end }, orderBy: [count_DESC]) {
             count
             dimensions { clientCountryName }
           }
@@ -89,22 +130,29 @@ app.get('/analytics', async (c) => {
   try {
     const cfResponse = await fetch('https://api.cloudflare.com/client/v4/graphql', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiToken}` },
-      body: JSON.stringify({ query })
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Authorization': `Bearer ${apiToken}` 
+      },
+      body: JSON.stringify({ 
+        query,
+        variables: { accountId, zoneId, start: isoStart, end: isoEnd, dateStart }
+      })
     });
 
     const cfData: any = await cfResponse.json();
 
     if (cfData.errors) {
-      console.error("Erro Cloudflare:", JSON.stringify(cfData.errors));
       return c.json({ error: 'Erro API Cloudflare', details: cfData.errors }, 500);
     }
 
     const zoneData = cfData?.data?.viewer?.zones?.[0] || {};
     const accountData = cfData?.data?.viewer?.accounts?.[0] || {};
+    
     const trafficRaw = zoneData.traffic?.[0] || { count: 0, sum: { edgeResponseBytes: 0 } };
     const dbMetrics = accountData.d1?.[0]?.sum || { readQueries: 0, writeQueries: 0 };
     const cacheRaw = zoneData.cache || [];
+    
     const totalCacheReqs = cacheRaw.reduce((acc: number, item: any) => acc + item.count, 0);
     const hits = cacheRaw.find((i: any) => ['hit', 'revalidated'].includes(i.dimensions.cacheStatus))?.count || 0;
     const cacheRatio = totalCacheReqs > 0 ? ((hits / totalCacheReqs) * 100).toFixed(0) : "0";
@@ -117,15 +165,14 @@ app.get('/analytics', async (c) => {
     return c.json({
       requests: trafficRaw.count,
       bytes: trafficRaw.sum.edgeResponseBytes,
-      cacheRatio: cacheRatio,
+      cacheRatio: `${cacheRatio}%`,
       dbReads: dbMetrics.readQueries,
       dbWrites: dbMetrics.writeQueries,
       countries: countries
     });
 
   } catch (e: any) {
-    console.error("Monitoring Exception:", e.message);
-    return c.json({ error: 'Falha interna', msg: e.message }, 500);
+    return c.json({ error: 'Falha interna de monitoramento', msg: e.message }, 500);
   }
 });
 
