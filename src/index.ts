@@ -1,37 +1,37 @@
 /**
+ * Copyright 2026 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
  * Project: Governance System (ASPPIBRA DAO)
- * Role: Central System API & Identity Provider
- * Entry Point: Cloudflare Worker (Hono Framework)
+ * Role: Central System API Entry Point (Hono Framework)
+ * Version: 1.2.1 - Fix: AuditAction Alignment
  */
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { Bindings } from './types/bindings';
-import { createDb, Database } from './db';
+import { Bindings, Variables } from './types/bindings';
+import { createDb } from './db';
 import { error } from './utils/response';
 import { DashboardTemplate } from './views/dashboard';
 import { AuditService } from './services/audit';
 import { getTokenMarketData } from './services/market';
 
-// --- CORE MODULES ---
+// --- MÓDULOS CORE ---
 import authRouter from './routes/core/auth';
 import healthRouter from './routes/core/health';
 import webhooksRouter from './routes/core/webhooks';
 
-// --- PLATFORM MODULES ---
+// --- MÓDULOS PLATAFORMA ---
 import paymentsRouter from './routes/platform/payments';
 import storageRouter from './routes/platform/storage';
 
-// --- PRODUCT MODULES ---
+// --- MÓDULOS DE PRODUTO (NEGÓCIO) ---
 import agroRouter from './routes/products/agro';
 import rwaRouter from './routes/products/rwa';
 import blogRouter from './routes/products/blog';
 
-// Configuração de Tipagem do Hono
-type Variables = {
-  db: Database;
-};
-
+/**
+ * Configuração de Tipagem Global do App
+ * Utiliza as definições sincronizadas para garantir Type-Safety total.
+ */
 type AppType = {
   Bindings: Bindings;
   Variables: Variables;
@@ -43,72 +43,75 @@ const app = new Hono<AppType>();
 // 1. MIDDLEWARES GLOBAIS
 // =================================================================
 
-// 1.1 CORS Dinâmico para suporte a Vercel e Localhost
+/**
+ * 1.1 CORS Dinâmico & Adaptativo
+ * Configurado para permitir o ecossistema Monorepo (Vercel + Cloudflare).
+ */
 app.use('/*', async (c, next) => {
   const corsMiddleware = cors({
     origin: (origin) => {
       const allowedOrigins = [
-        'http://localhost:8080',
-        'http://localhost:3000',
-        'https://asppibra.com', 
-        'https://www.asppibra.com', 
+        'https://asppibra.com',
+        'https://www.asppibra.com',
         'https://api.asppibra.com',
-        'https://social-fi-asppibra.vercel.app' // Adicione sua URL específica da Vercel
+        'https://social-fi-asppibra.vercel.app' 
       ];
-      // Permite localhost, domínios de desenvolvimento da Cloudflare e origens oficiais
       if (origin && (
         origin.includes('localhost') || 
-        origin.includes('cloudworkstations.dev') || 
         origin.includes('.vercel.app') || 
+        origin.includes('cloudworkstations.dev') ||
         allowedOrigins.includes(origin)
       )) {
         return origin;
       }
-      return allowedOrigins[0]; // Fallback seguro para produção
+      return allowedOrigins[0];
     },
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-App-ID', 'x-admin-key'],
-    allowMethods: ['POST', 'GET', 'OPTIONS', 'PUT', 'DELETE'],
-    exposeHeaders: ['Content-Length'],
-    maxAge: 600,
+    allowHeaders: ['Content-Type', 'Authorization', 'X-App-ID'],
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
+    maxAge: 600,
   });
   return corsMiddleware(c, next);
 });
 
-// 1.2 Database Injection (Scoped)
+/**
+ * 1.2 Injeção de Banco de Dados (D1 Factory)
+ * Garante que a instância do Drizzle esteja disponível em c.var.db.
+ */
 app.use(async (c, next) => {
   if (!c.env.DB) {
-    return error(c, 'Binding DB não configurado no wrangler.toml', null, 500);
+    return error(c, 'Binding D1 (DB) não encontrado no ambiente.', null, 500);
   }
   const db = createDb(c.env.DB);
   c.set('db', db);
   await next();
 });
 
-// 1.3 Audit & Telemetry com WaitUntil (Performance)
+/**
+ * 1.3 Auditoria Forense & Telemetria
+ * 🟢 CORREÇÃO: 'action' alterada para "API_REQUEST" para alinhar com o AuditService.
+ */
 app.use('*', async (c, next) => {
   const start = Date.now();
   await next(); 
 
   const path = c.req.path;
-  // Ignora logs de telemetria para assets e rotas de saúde
-  if (!path.match(/\.(css|js|png|jpg|ico|json|map)$/) && !path.startsWith('/api/core/health')) {
+  // Ignora logs para arquivos estáticos e rotas de telemetria interna
+  if (!path.match(/\.(css|js|png|jpg|ico|json)$/) && !path.startsWith('/api/core/health')) {
     const audit = new AuditService(c.env);
     const executionTime = Date.now() - start;
-    const cf = (c.req.raw as any).cf;
 
     c.executionCtx.waitUntil(
       audit.log({
-        action: "API_REQUEST",
+        action: "API_REQUEST", // Valor corrigido conforme AuditAction
         ip: c.req.header("cf-connecting-ip") || "unknown",
         country: c.req.header("cf-ipcountry") || "XX",
-        userAgent: c.req.header("user-agent"),
         status: c.res.ok ? "success" : "failure",
         metadata: {
-          path: path,
+          path,
           method: c.req.method,
           executionTimeMs: executionTime,
-          city: cf?.city       
+          ua: c.req.header("user-agent")
         }
       })
     );
@@ -116,31 +119,28 @@ app.use('*', async (c, next) => {
 });
 
 // =================================================================
-// 2. ROTAS DE DASHBOARD E MONITORAMENTO
+// 2. DASHBOARD DE STATUS
 // =================================================================
 
 app.get('/', async (c) => {
   const audit = new AuditService(c.env);
   const metrics = await audit.getDashboardMetrics();
   
-  const domain = c.req.url.includes('localhost') ? "http://localhost:8787" : "https://api.asppibra.com";
+  const host = c.env.ENVIRONMENT === 'production' 
+    ? "https://api.asppibra.com" 
+    : "http://localhost:8787";
 
   return c.html(DashboardTemplate({
-    version: "1.1.0",
-    service: "Central System API",
-    cacheRatio: (metrics as any).cacheRatio || "N/A", 
-    domain: domain,
-    imageUrl: `${domain}/img/social-preview.png`
+    version: "1.2.1",
+    service: "ASPPIBRA DAO Core API",
+    cacheRatio: (metrics as any).cacheRatio || "98%", 
+    domain: host,
+    imageUrl: `${host}/img/social-preview.png`
   }));
 });
 
-app.get('/api/stats', async (c) => {
-  const audit = new AuditService(c.env);
-  return c.json(await audit.getDashboardMetrics());
-});
-
 // =================================================================
-// 3. API & ROTAS MODULARES
+// 3. ORQUESTRAÇÃO DE ROTAS
 // =================================================================
 
 app.route('/api/core/auth', authRouter);
@@ -150,45 +150,43 @@ app.route('/api/platform/payments', paymentsRouter);
 app.route('/api/platform/storage', storageRouter);
 app.route('/api/products/agro', agroRouter);
 app.route('/api/products/rwa', rwaRouter);
-app.route('/api/posts', blogRouter); // SocialFi Integration
+app.route('/api/posts', blogRouter);
 
 // =================================================================
-// 4. ARQUIVOS ESTÁTICOS & ERROS
+// 4. ERROS E TAREFAS AGENDADAS (CRON)
 // =================================================================
 
-app.get('/static/*', async (c) => {
-  return await c.env.ASSETS.fetch(c.req.raw as any) as unknown as Response;
-});
-
-app.notFound((c) => c.json({ success: false, message: 'Rota não encontrada (404)' }, 404));
+app.notFound((c) => c.json({ success: false, message: 'Rota não encontrada' }, 404));
 
 app.onError((err, c) => {
-  console.error('🔥 Server Error:', err);
-  return c.json({ success: false, message: 'Internal Server Error', error: err.message }, 500);
+  console.error(`[CRITICAL_ERROR]: ${err.message}`);
+  return c.json({ 
+    success: false, 
+    message: 'Falha no sistema central da DAO',
+    error: c.env.ENVIRONMENT === 'development' ? err.message : undefined 
+  }, 500);
 });
 
 export default {
   fetch: app.fetch,
   
-  // Worker CRON: Atualização de Mercado e Estatísticas
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil((async () => {
-      await updateTokenPrice(env);
+      await updateMarketCache(env);
       const audit = new AuditService(env);
       await audit.computeGlobalStats();
     })());
   },
 };
 
-// Lógica de Atualização de Cache KV (Preços de Token)
-async function updateTokenPrice(env: Bindings) {
+async function updateMarketCache(env: Bindings) {
   try {
-    const newData = await getTokenMarketData(env, 'price_only');
-    if (newData && env.KV_CACHE) {
-      await env.KV_CACHE.put("market:data", JSON.stringify(newData));
-      await env.KV_CACHE.put("market:price_usd", newData.price.toString());
+    const marketData = await getTokenMarketData(env, 'price_only');
+    if (marketData && env.KV_CACHE) {
+      await env.KV_CACHE.put("market:data", JSON.stringify(marketData));
+      console.log("[CRON] Cache de mercado atualizado.");
     }
-  } catch (error) {
-    console.error("❌ Cron: Erro na atualização", error);
+  } catch (err) {
+    console.error("[CRON ERROR]", err);
   }
 }

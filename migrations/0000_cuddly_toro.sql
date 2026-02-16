@@ -1,24 +1,27 @@
 CREATE TABLE `audit_logs` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`actor_id` integer,
+	`actor_id` text NOT NULL,
 	`action` text NOT NULL,
 	`status` text DEFAULT 'success',
 	`ip_address` text,
+	`user_agent` text,
 	`metadata` text,
-	`created_at` integer DEFAULT (strftime('%s', 'now')),
-	FOREIGN KEY (`actor_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
+	`created_at` integer DEFAULT (strftime('%s', 'now'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_audit_action` ON `audit_logs` (`action`);--> statement-breakpoint
 CREATE INDEX `idx_audit_actor` ON `audit_logs` (`actor_id`);--> statement-breakpoint
+CREATE INDEX `idx_audit_time` ON `audit_logs` (`created_at`);--> statement-breakpoint
 CREATE TABLE `contracts` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`description` text NOT NULL,
 	`total_value` integer NOT NULL,
-	`total_installments` integer,
+	`currency` text DEFAULT 'BRL',
+	`total_installments` integer DEFAULT 1,
 	`status` text DEFAULT 'active',
 	`created_at` integer DEFAULT (strftime('%s', 'now')),
+	`updated_at` integer DEFAULT (strftime('%s', 'now')),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
@@ -26,6 +29,7 @@ CREATE TABLE `password_resets` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`token` text NOT NULL,
+	`ip_address` text,
 	`expires_at` integer NOT NULL,
 	`used` integer DEFAULT false,
 	`created_at` integer DEFAULT (strftime('%s', 'now')),
@@ -33,17 +37,6 @@ CREATE TABLE `password_resets` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `password_resets_token_unique` ON `password_resets` (`token`);--> statement-breakpoint
-CREATE TABLE `post_comments` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`post_id` integer NOT NULL,
-	`user_id` integer NOT NULL,
-	`content` text NOT NULL,
-	`likes` integer DEFAULT 0,
-	`created_at` integer DEFAULT (strftime('%s', 'now')),
-	FOREIGN KEY (`post_id`) REFERENCES `posts`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
 CREATE TABLE `post_favorites` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`post_id` integer NOT NULL,
@@ -69,7 +62,6 @@ CREATE TABLE `posts` (
 	`total_favorites` integer DEFAULT 0,
 	`time_to_read` integer DEFAULT 5,
 	`is_featured` integer DEFAULT false,
-	`is_trending` integer DEFAULT false,
 	`publish` integer DEFAULT true,
 	`created_at` integer DEFAULT (strftime('%s', 'now')),
 	`updated_at` integer DEFAULT (strftime('%s', 'now')),
@@ -79,7 +71,6 @@ CREATE TABLE `posts` (
 CREATE UNIQUE INDEX `posts_slug_unique` ON `posts` (`slug`);--> statement-breakpoint
 CREATE INDEX `idx_posts_slug` ON `posts` (`slug`);--> statement-breakpoint
 CREATE INDEX `idx_posts_publish` ON `posts` (`publish`);--> statement-breakpoint
-CREATE INDEX `idx_posts_category` ON `posts` (`category`);--> statement-breakpoint
 CREATE TABLE `users` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`first_name` text NOT NULL,
@@ -90,15 +81,18 @@ CREATE TABLE `users` (
 	`avatar_url` text,
 	`mfa_secret` text,
 	`mfa_enabled` integer DEFAULT false,
+	`last_login_at` integer,
 	`kyc_status` text DEFAULT 'none',
 	`role` text DEFAULT 'citizen',
 	`created_at` integer DEFAULT (strftime('%s', 'now')),
-	`updated_at` integer DEFAULT (strftime('%s', 'now'))
+	`updated_at` integer DEFAULT (strftime('%s', 'now')),
+	`deleted_at` integer
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);--> statement-breakpoint
 CREATE INDEX `idx_users_email` ON `users` (`email`);--> statement-breakpoint
 CREATE INDEX `idx_users_role` ON `users` (`role`);--> statement-breakpoint
+CREATE INDEX `idx_users_deleted` ON `users` (`deleted_at`);--> statement-breakpoint
 CREATE TABLE `wallets` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
