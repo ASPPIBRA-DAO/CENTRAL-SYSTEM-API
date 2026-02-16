@@ -1,48 +1,62 @@
 /**
+ * Copyright 2026 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
  * Project: Governance System (ASPPIBRA DAO)
  * Role: Type Definitions for Cloudflare Bindings & Hono Variables
- * Version: 1.1.0
+ * Version: 1.1.1 - Strict Sync with AuthProvider & D1 Factory
  */
+
 import { D1Database, R2Bucket, Fetcher, KVNamespace } from "@cloudflare/workers-types";
 
 /**
- * Bindings: Representam os recursos externos da Cloudflare definidos no wrangler.toml
+ * [BINDINGS]
+ * Representam os recursos físicos e variáveis de ambiente injetadas pelo Cloudflare.
+ * Devem ser espelhados exatamente como definidos no seu wrangler.jsonc.
  */
 export type Bindings = {
-  // 1. Banco de Dados (D1) - Onde residem os usuários e contratos
-  DB: D1Database;
+  // --- Infraestrutura de Dados ---
+  DB: D1Database;          // Banco de Dados Principal (Contratos RWA/Usuários)
+  STORAGE: R2Bucket;       // Bucket R2 (Documentos e Imagens)
+  KV_AUTH: KVNamespace;    // Gestão de Sessões e Tokens de Password Reset
+  KV_CACHE: KVNamespace;   // Cache de Performance e Rate Limit
 
-  // 2. Armazenamento de Arquivos (R2) - Para imagens de capa e documentos
-  STORAGE: R2Bucket;
+  // --- Assets e Proxy ---
+  ASSETS: Fetcher;         // Binding para arquivos estáticos (Frontend Assets)
 
-  // 3. Arquivos Estáticos - Gerenciados pelo Cloudflare Pages/Workers Assets
-  ASSETS: Fetcher;
-
-  // 4. Armazenamento de Chave-Valor (KV)
-  KV_AUTH: KVNamespace;
-  KV_CACHE: KVNamespace;
-
-  // 5. Segredos e Chaves de API
+  // --- Segredos e Chaves de API (Configurados via wrangler secret) ---
   JWT_SECRET: string;
   ZERO_EX_API_KEY: string;
   MORALIS_API_KEY: string;
 
-  // 6. Analytics e Gestão Cloudflare
+  // --- Variáveis de Ambiente e Gestão ---
+  ENVIRONMENT: 'development' | 'production' | 'staging';
   CLOUDFLARE_ACCOUNT_ID: string;
   CLOUDFLARE_ZONE_ID: string;
   CLOUDFLARE_API_TOKEN: string;
+  NEXT_PUBLIC_HOST_API: string;
 };
 
 /**
- * Variables: Representam os dados injetados no contexto da requisição (c.set / c.get)
- * Essencial para o funcionamento do requireAuth e das rotas protegidas.
+ * [VARIABLES]
+ * Dados injetados no ciclo de vida da requisição (Contexto Hono).
+ * Utilizados pelos middlewares requireAuth e Audit para manter a rastreabilidade.
  */
 export type Variables = {
+  /**
+   * Usuário Autenticado:
+   * Sincronizado com a interface User do Frontend para garantir que
+   * logs de auditoria e permissões de UI coincidam.
+   */
   user: {
     id: number;
     email: string;
+    firstName: string;
+    lastName: string;
     role: 'citizen' | 'partner' | 'admin' | 'system';
   };
-  // Instância do banco injetada no middleware global
-  db: import("../db").Database; 
+
+  /**
+   * Instância de Banco Injetada:
+   * Referencia o tipo de retorno da sua factory createDb(c.env.DB).
+   */
+  db: ReturnType<typeof import("../db").createDb>;
 };
