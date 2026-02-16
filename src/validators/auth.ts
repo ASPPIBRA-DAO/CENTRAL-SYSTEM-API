@@ -1,53 +1,88 @@
 /**
- * Copyright 2025 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
+ * Copyright 2026 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
  * Project: Governance System (ASPPIBRA DAO)
- * Role: Central System API & Identity Provider
+ * Role: Authentication Validators (Zod Schemas)
+ * Version: 1.1.0 - Strict Sanitization & Password Complexity
  */
+
 import { z } from 'zod';
 
-// --- Schema para REGISTRO (Sign-Up) ---
-// Sincronizado com os campos firstName e lastName do banco
+/**
+ * Regex para Complexidade de Senha:
+ * - Mínimo 8 caracteres
+ * - Pelo menos uma letra maiúscula
+ * - Pelo menos um número ou caractere especial
+ */
+const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>0-9]).{8,}$/;
+const passwordMessage = "A senha deve ter no mínimo 8 caracteres, incluindo uma letra maiúscula e um número ou símbolo.";
+
+/**
+ * Regex para Wallet EVM (Ethereum/BSC):
+ * - Deve começar com 0x
+ * - Seguido por 40 caracteres hexadecimais (total 42)
+ */
+const walletRegex = /^0x[a-fA-F0-9]{40}$/;
+
+// --- [REGISTRO (Sign-Up)] ---
 export const signUpSchema = z.object({
-  firstName: z.string().min(2, "O nome deve ter pelo menos 2 caracteres"),
-  lastName: z.string().min(2, "O sobrenome deve ter pelo menos 2 caracteres"),
-  email: z.string().email("Formato de email inválido"),
-  password: z.string().min(8, "A senha deve ter no mínimo 8 caracteres"),
+  firstName: z.string()
+    .trim()
+    .min(2, "O nome deve ter pelo menos 2 caracteres"),
+    
+  lastName: z.string()
+    .trim()
+    .min(2, "O sobrenome deve ter pelo menos 2 caracteres"),
+    
+  email: z.string()
+    .trim()
+    .toLowerCase() // Normaliza para evitar duplicatas (Ex: Sandro@ e sandro@)
+    .email("Formato de email inválido"),
+    
+  password: z.string()
+    .min(8, passwordMessage)
+    .regex(passwordRegex, passwordMessage),
   
-  // Web3 opcional (mantido conforme sua versão anterior)
-  walletAddress: z.string().startsWith("0x", "Endereço de carteira inválido").optional(),
+  walletAddress: z.string()
+    .regex(walletRegex, "Endereço de carteira Web3 inválido (deve ser 42 caracteres hex)")
+    .optional()
+    .or(z.literal("")), // Permite campo vazio se opcional
 });
 
-// --- Schema para LOGIN (Sign-In) ---
+// --- [LOGIN (Sign-In)] ---
 export const loginSchema = z.object({
-  email: z.string().email("Digite um email válido"),
-  password: z.string().min(1, "A senha é obrigatória"),
+  email: z.string()
+    .trim()
+    .toLowerCase()
+    .email("Digite um email válido"),
+    
+  password: z.string()
+    .min(1, "A senha é obrigatória"),
 });
 
-// --- [NOVO] Schema para ESQUECI MINHA SENHA ---
+// --- [ESQUECI MINHA SENHA] ---
 export const forgotPasswordSchema = z.object({
-  email: z.string().email("Digite um email válido"),
+  email: z.string()
+    .trim()
+    .toLowerCase()
+    .email("Digite um email válido"),
 });
 
-// --- [NOVO] Schema para DEFINIR NOVA SENHA (Reset) ---
+// --- [DEFINIR NOVA SENHA (Reset)] ---
 export const resetPasswordSchema = z.object({
-  token: z.string().min(1, "Token de recuperação é obrigatório"),
-  password: z.string().min(8, "A nova senha deve ter no mínimo 8 caracteres"),
+  token: z.string()
+    .min(1, "Token de recuperação é obrigatório"),
+    
+  password: z.string()
+    .min(8, passwordMessage)
+    .regex(passwordRegex, passwordMessage),
+    
+  confirmPassword: z.string()
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "As senhas não coincidem",
+  path: ["confirmPassword"],
 });
 
-// --- Inferindo os tipos TypeScript ---
+// --- [INFERÊNCIA DE TIPOS] ---
 export type SignUpInput = z.infer<typeof signUpSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
