@@ -2,7 +2,7 @@
  * Copyright 2026 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
  * Project: Governance System (ASPPIBRA DAO)
  * Role: Central System API Entry Point (Hono Framework)
- * Version: 1.2.1 - Fix: AuditAction Alignment
+ * Version: 1.2.2 - Bugfix: Test Route Alignment & Audit Hygiene
  */
 
 import { Hono } from 'hono';
@@ -29,8 +29,8 @@ import rwaRouter from './routes/products/rwa';
 import blogRouter from './routes/products/blog';
 
 /**
- * Configuração de Tipagem Global do App
- * Utiliza as definições sincronizadas para garantir Type-Safety total.
+ * Definição de Tipagem Global
+ * Integra Bindings (Variáveis de Ambiente) e Variables (Contexto Interno)
  */
 type AppType = {
   Bindings: Bindings;
@@ -40,12 +40,12 @@ type AppType = {
 const app = new Hono<AppType>();
 
 // =================================================================
-// 1. MIDDLEWARES GLOBAIS
+// 1. MIDDLEWARES GLOBAIS (Segurança e Infraestrutura)
 // =================================================================
 
 /**
- * 1.1 CORS Dinâmico & Adaptativo
- * Configurado para permitir o ecossistema Monorepo (Vercel + Cloudflare).
+ * 1.1 CORS Adaptativo
+ * Suporta o ecossistema Monorepo permitindo Vercel, Cloud Workstations e localhost.
  */
 app.use('/*', async (c, next) => {
   const corsMiddleware = cors({
@@ -69,41 +69,39 @@ app.use('/*', async (c, next) => {
     allowHeaders: ['Content-Type', 'Authorization', 'X-App-ID'],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
-    maxAge: 600,
   });
   return corsMiddleware(c, next);
 });
 
 /**
- * 1.2 Injeção de Banco de Dados (D1 Factory)
- * Garante que a instância do Drizzle esteja disponível em c.var.db.
+ * 1.2 Injeção de Banco de Dados (Drizzle/D1)
+ * Disponibiliza a instância do DB para todas as rotas via c.get('db').
  */
 app.use(async (c, next) => {
   if (!c.env.DB) {
-    return error(c, 'Binding D1 (DB) não encontrado no ambiente.', null, 500);
+    return error(c, 'Binding D1 não configurado no ambiente.', null, 500);
   }
-  const db = createDb(c.env.DB);
-  c.set('db', db);
+  c.set('db', createDb(c.env.DB));
   await next();
 });
 
 /**
- * 1.3 Auditoria Forense & Telemetria
- * 🟢 CORREÇÃO: 'action' alterada para "API_REQUEST" para alinhar com o AuditService.
+ * 1.3 Auditoria Forense e Telemetria
+ * Registra metadados de requisições ignorando assets estáticos e monitoramento de saúde.
  */
 app.use('*', async (c, next) => {
   const start = Date.now();
   await next(); 
 
   const path = c.req.path;
-  // Ignora logs para arquivos estáticos e rotas de telemetria interna
-  if (!path.match(/\.(css|js|png|jpg|ico|json)$/) && !path.startsWith('/api/core/health')) {
+  // Higiene de Logs: Ignora arquivos estáticos e rotas de Health Check
+  if (!path.match(/\.(css|js|png|jpg|ico|json)$/) && !path.includes('/health')) {
     const audit = new AuditService(c.env);
     const executionTime = Date.now() - start;
 
     c.executionCtx.waitUntil(
       audit.log({
-        action: "API_REQUEST", // Valor corrigido conforme AuditAction
+        action: "API_REQUEST",
         ip: c.req.header("cf-connecting-ip") || "unknown",
         country: c.req.header("cf-ipcountry") || "XX",
         status: c.res.ok ? "success" : "failure",
@@ -119,7 +117,7 @@ app.use('*', async (c, next) => {
 });
 
 // =================================================================
-// 2. DASHBOARD DE STATUS
+// 2. DASHBOARD INSTITUCIONAL E ROTAS DE TESTE
 // =================================================================
 
 app.get('/', async (c) => {
@@ -131,7 +129,7 @@ app.get('/', async (c) => {
     : "http://localhost:8787";
 
   return c.html(DashboardTemplate({
-    version: "1.2.1",
+    version: "1.2.2",
     service: "ASPPIBRA DAO Core API",
     cacheRatio: (metrics as any).cacheRatio || "98%", 
     domain: host,
@@ -139,8 +137,14 @@ app.get('/', async (c) => {
   }));
 });
 
+/**
+ * 🟢 FIX PARA TESTES AUTOMATIZADOS (Vitest)
+ * Mapeia explicitamente /health-db para satisfazer as asserções do index.spec.ts
+ */
+app.route('/health-db', healthRouter);
+
 // =================================================================
-// 3. ORQUESTRAÇÃO DE ROTAS
+// 3. ORQUESTRAÇÃO DE ROTAS (API Gateway)
 // =================================================================
 
 app.route('/api/core/auth', authRouter);
@@ -153,16 +157,16 @@ app.route('/api/products/rwa', rwaRouter);
 app.route('/api/posts', blogRouter);
 
 // =================================================================
-// 4. ERROS E TAREFAS AGENDADAS (CRON)
+// 4. GESTÃO DE ERROS E CRON JOBS
 // =================================================================
 
-app.notFound((c) => c.json({ success: false, message: 'Rota não encontrada' }, 404));
+app.notFound((c) => c.json({ success: false, message: 'Recurso não localizado na DAO' }, 404));
 
 app.onError((err, c) => {
-  console.error(`[CRITICAL_ERROR]: ${err.message}`);
+  console.error(`[CRITICAL_SYSTEM_ERROR]: ${err.message}`);
   return c.json({ 
     success: false, 
-    message: 'Falha no sistema central da DAO',
+    message: 'Falha no processamento central',
     error: c.env.ENVIRONMENT === 'development' ? err.message : undefined 
   }, 500);
 });
@@ -170,6 +174,10 @@ app.onError((err, c) => {
 export default {
   fetch: app.fetch,
   
+  /**
+   * Worker Scheduled (Cron)
+   * Executa tarefas de manutenção de cache e estatísticas globais.
+   */
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil((async () => {
       await updateMarketCache(env);
@@ -179,12 +187,15 @@ export default {
   },
 };
 
+/**
+ * Atualiza o cache de dados de mercado (Tokens/RWA) no Cloudflare KV
+ */
 async function updateMarketCache(env: Bindings) {
   try {
     const marketData = await getTokenMarketData(env, 'price_only');
     if (marketData && env.KV_CACHE) {
       await env.KV_CACHE.put("market:data", JSON.stringify(marketData));
-      console.log("[CRON] Cache de mercado atualizado.");
+      console.log("[CRON] Cache de mercado ASPPIBRA sincronizado.");
     }
   } catch (err) {
     console.error("[CRON ERROR]", err);
