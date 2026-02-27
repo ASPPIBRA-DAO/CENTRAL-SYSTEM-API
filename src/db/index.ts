@@ -1,19 +1,20 @@
 /**
- * Copyright 2025 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
+ * Copyright 2026 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
  * Project: Governance System (ASPPIBRA DAO)
  * Role: Database Connection Factory (Drizzle ORM + D1)
- * Version: 1.2.0 - Enhanced Factory with Debugging Support
+ * Version: 2.0.0 - Production Hardened
  */
 
 import { drizzle, DrizzleD1Database } from 'drizzle-orm/d1';
+import { Logger } from 'drizzle-orm/logger';
 import * as schema from './schema';
 
 /**
  * Interface estendida para configurações da Factory.
- * Permite o controle de logs e comportamentos de depuração.
+ * Permite o controle de logs (boolean ou custom Logger) e comportamentos de depuração.
  */
-interface DbOptions {
-  logger?: boolean;
+export interface DbOptions {
+  logger?: boolean | Logger;
 }
 
 /**
@@ -25,12 +26,18 @@ interface DbOptions {
  * momento exato em que o Hono recebe o contexto.
  * * @param d1 - O binding nativo do D1Database (c.env.DB)
  * @param options - Configurações opcionais como ativação de logs SQL
+ * @throws Error se o binding D1 não for fornecido (segurança em runtime)
  * @returns Instância do Drizzle configurada com o Schema ASPPIBRA
  */
 export const createDb = (d1: D1Database, options: DbOptions = {}) => {
+  // ✅ SAFETY: Fail fast if D1 binding is undefined (common config error)
+  if (!d1) {
+    throw new Error('❌ FATAL: D1 Binding is missing. Check your wrangler.toml [[d1_databases]] config.');
+  }
+
   return drizzle(d1, { 
     schema, 
-    // Ativa o logger para visualizar as queries SQL no console do Wrangler (útil em dev)
+    // Ativa o logger para visualizar as queries SQL ou usa um logger customizado (ex: Datadog)
     logger: options.logger ?? false 
   });
 };
