@@ -2,7 +2,7 @@
  * Copyright 2026 ASPPIBRA – Associação dos Proprietários e Possuidores de Imóveis no Brasil.
  * Project: Governance System (ASPPIBRA DAO)
  * Role: Password Recovery Controller (Absolute Bank-Grade 10/10)
- * Version: 10.0.0 - Full Orphan Invalidation & Persistent Fingerprinting
+ * Version: 10.0.1 - Zod Typings Strict Compliant
  */
 
 import { Hono } from 'hono';
@@ -76,7 +76,8 @@ passwordRoutes.post('/forgot-password', rateLimit({ limit: 3, window: 3600 }), a
     const parseStatus = forgotPasswordSchema.safeParse(body);
     
     if (!parseStatus.success) {
-      return error(c, 'Dados inválidos', parseStatus.error.format(), 400);
+      // 🛡️ SRE: Zod .flatten().fieldErrors gera um Record<string, string[]> que respeita o contrato do response.ts perfeitamente
+      return error(c, 'Dados inválidos', parseStatus.error.flatten().fieldErrors, 400);
     }
 
     const { email } = parseStatus.data;
@@ -100,8 +101,6 @@ passwordRoutes.post('/forgot-password', rateLimit({ limit: 3, window: 3600 }), a
 
     if (user) {
       // ⏱️ IDENTITY RATE LIMIT & COOLDOWN: Previne Inbox Flooding
-      // Como o TTL padrão é de 60min, se o token expira em MAIS de 55min, ele foi gerado a MENOS de 5min.
-      // Isso ignora botnets que rotacionam o IP para espamar a mesma conta.
       const recentThreshold = new Date(now.getTime() + 55 * 60 * 1000);
       const recentRequest = await database.select({ id: passwordResets.id }).from(passwordResets)
         .where(and(
@@ -119,7 +118,6 @@ passwordRoutes.post('/forgot-password', rateLimit({ limit: 3, window: 3600 }), a
         .where(and(eq(passwordResets.userId, user.id), eq(passwordResets.used, false)));
 
       // 2. 🏛️ PERSISTÊNCIA RELACIONAL (ACID com Fingerprint Congelado)
-      // Guardamos o hash exato gerado hoje para evitar que mudanças futuras de algoritmo quebrem a validação
       const fingerprint = await createFingerprint(currentIp, currentUa);
       await database.insert(passwordResets).values({
         userId: user.id,
@@ -129,17 +127,19 @@ passwordRoutes.post('/forgot-password', rateLimit({ limit: 3, window: 3600 }), a
         userAgent: JSON.stringify({ raw: currentUa, fp: fingerprint }) // Estruturado
       });
       
-      c.executionCtx.waitUntil(
-        database.insert(auditLogs).values({
-          action: 'PASSWORD_RESET_REQUESTED',
-          actorId: user.id,
-          actorType: 'user',
-          actorUserId: user.id,
-          ipAddress: currentIp,
-          userAgent: currentUa,
-          status: 'success'
-        })
-      );
+      if (c.executionCtx) {
+        c.executionCtx.waitUntil(
+          database.insert(auditLogs).values({
+            action: 'PASSWORD_RESET_REQUESTED',
+            actorId: user.id,
+            actorType: 'user',
+            actorUserId: user.id,
+            ipAddress: currentIp,
+            userAgent: currentUa,
+            status: 'success'
+          })
+        );
+      }
       
       if (c.env.NODE_ENV !== 'production') {
         console.log(`[AUTH-DAO] Link de recuperação: /reset?token=${recoveryToken}`);
@@ -164,7 +164,8 @@ passwordRoutes.post('/reset-password', rateLimit({ limit: 5, window: 3600 }), as
     const parseStatus = resetPasswordSchema.safeParse(body);
     
     if (!parseStatus.success) {
-      return error(c, 'Dados de nova senha inválidos.', parseStatus.error.format(), 400);
+      // 🛡️ SRE: Compatibilidade de Tipagem Zod vs utils/response.ts (flatten)
+      return error(c, 'Dados de nova senha inválidos.', parseStatus.error.flatten().fieldErrors, 400);
     }
 
     const { token, password } = parseStatus.data;
@@ -183,8 +184,6 @@ passwordRoutes.post('/reset-password', rateLimit({ limit: 5, window: 3600 }), as
     const currentUa = c.req.header('user-agent') || 'unknown';
 
     // 🚨 ENGINE-LEVEL ATOMIC CHECK-AND-MARK (ACID)
-    // Consome o token atomicamente. Se qualquer validação falhar abaixo (MFA, Reuso),
-    // o token já foi queimado, forçando o atacante a recomeçar (Burn on First Strike).
     const resetRecord = await database.update(passwordResets)
       .set({ used: true, usedAt: now })
       .where(and(
@@ -198,16 +197,18 @@ passwordRoutes.post('/reset-password', rateLimit({ limit: 5, window: 3600 }), as
     if (!resetRecord) {
       await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 100));
       
-      c.executionCtx.waitUntil(
-        database.insert(auditLogs).values({
-          action: 'PASSWORD_RESET_INVALID_TOKEN',
-          actorId: 'system',
-          actorType: 'system',
-          ipAddress: currentIp,
-          userAgent: currentUa,
-          status: 'fail'
-        })
-      );
+      if (c.executionCtx) {
+        c.executionCtx.waitUntil(
+          database.insert(auditLogs).values({
+            action: 'PASSWORD_RESET_INVALID_TOKEN',
+            actorId: 'system',
+            actorType: 'system',
+            ipAddress: currentIp,
+            userAgent: currentUa,
+            status: 'fail'
+          })
+        );
+      }
       return error(c, 'O link de recuperação é inválido ou já expirou.', null, 400);
     }
 
@@ -238,22 +239,23 @@ passwordRoutes.post('/reset-password', rateLimit({ limit: 5, window: 3600 }), as
       const parsedUa = JSON.parse(resetRecord.userAgent || '{}');
       originalFingerprint = parsedUa.fp || '';
     } catch (e) {
-      // Fallback para tokens legados onde o userAgent era puro
       originalFingerprint = await createFingerprint(resetRecord.ipAddress || '', resetRecord.userAgent || '');
     }
 
     if (currentFingerprint !== originalFingerprint) {
-      c.executionCtx.waitUntil(
-        database.insert(auditLogs).values({
-          action: 'PASSWORD_RESET_ANOMALY',
-          actorId: userId,
-          actorType: 'user',
-          ipAddress: currentIp,
-          userAgent: currentUa,
-          status: 'blocked',
-          metadata: { reason: 'context_mismatch', original_ip: resetRecord.ipAddress }
-        })
-      );
+      if (c.executionCtx) {
+        c.executionCtx.waitUntil(
+          database.insert(auditLogs).values({
+            action: 'PASSWORD_RESET_ANOMALY',
+            actorId: userId,
+            actorType: 'user',
+            ipAddress: currentIp,
+            userAgent: currentUa,
+            status: 'blocked',
+            metadata: { reason: 'context_mismatch', original_ip: resetRecord.ipAddress }
+          })
+        );
+      }
       
       // 📈 MFA REAL STEP-UP
       if (currentUser?.mfaEnabled && currentUser.mfaSecretEncrypted) {
@@ -275,27 +277,26 @@ passwordRoutes.post('/reset-password', rateLimit({ limit: 5, window: 3600 }), as
 
     const hashedPassword = await hashPassword(password);
     
-    // 🚨 OPERAÇÃO NUCLEAR SÍNCRONA (Garante Consistência e Higiene Total)
+    // 🚨 OPERAÇÃO NUCLEAR SÍNCRONA
     await Promise.all([
-      // 1. Atualiza a senha
       database.update(users).set({ passwordHash: hashedPassword, passwordUpdatedAt: now }).where(eq(users.id, userId)), 
-      // 2. Destrói todas as sessões conectadas
       database.delete(sessions).where(eq(sessions.userId, userId)),
-      // 3. Queima todos os outros tokens pendentes que o usuário possa ter no e-mail
       database.update(passwordResets).set({ used: true, usedAt: now }).where(eq(passwordResets.userId, userId))
     ]);
 
-    c.executionCtx.waitUntil(
-      database.insert(auditLogs).values({
-        action: 'PASSWORD_RESET_COMPLETED',
-        actorId: userId,
-        actorType: 'user',
-        actorUserId: userId,
-        ipAddress: currentIp,
-        userAgent: currentUa,
-        status: 'success'
-      })
-    );
+    if (c.executionCtx) {
+      c.executionCtx.waitUntil(
+        database.insert(auditLogs).values({
+          action: 'PASSWORD_RESET_COMPLETED',
+          actorId: userId,
+          actorType: 'user',
+          actorUserId: userId,
+          ipAddress: currentIp,
+          userAgent: currentUa,
+          status: 'success'
+        })
+      );
+    }
 
     // 🛡️ ANTI-TIMING: Symmetric Delay on Success
     await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 100));
