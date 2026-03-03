@@ -304,22 +304,113 @@ I -. CID .-> D
 ## 13. Estrutura do Repositório
 
 \`\`\`
-src/
-├── db/
-│   └── schema.ts            # Users, Sessions, Wallets, Audit Logs
-├── routes/
-│   └── core/auth/
-│       ├── index.ts         # Login, Refresh, Logout
-│       ├── session.ts       # /me, Perfil
-│       ├── password.ts      # Recuperação de senha
-│       ├── mfa.ts           # MFA / TOTP
-│       ├── web3.ts          # SIWE & Wallets
-│       ├── compliance.ts    # Termos & KYC
-│       └── admin.ts         # Roles & Banimento
-├── services/
-│   └── audit.ts             # Logger global de auditoria
-└── utils/
-    └── auth-guard.ts        # Middleware de autenticação
+├── back/
+│   │   ├── .wrangler/
+│   │   │   ├── state/
+│   │   │   │   └── v3/
+│   │   │   │       ├── cache/
+│   │   │   │       │   └── miniflare-CacheObject/
+│   │   │   │       ├── d1/
+│   │   │   │       │   └── miniflare-D1DatabaseObject/
+│   │   │   │       │       ├── 05d4084730d36b1073d62c37ab83e9c425d795b5ff34ed949083cdbf02fd7b33.sqlite
+│   │   │   │       │       ├── 05d4084730d36b1073d62c37ab83e9c425d795b5ff34ed949083cdbf02fd7b33.sqlite-shm
+│   │   │   │       │       └── 05d4084730d36b1073d62c37ab83e9c425d795b5ff34ed949083cdbf02fd7b33.sqlite-wal
+│   │   │   │       ├── kv/
+│   │   │   │       │   ├── 8a05d6f497e64e628fa34bde0622ffd4/
+│   │   │   │       │   │   └── blobs/
+│   │   │   │       │   │       ├── 2bd57998f842b1014c74638a8f182cfa8dcaa3515c60de272e8fae4df39c6d850000019c623c335b
+│   │   │   │       │   │       ├── 463286870278ded7db72e662d5af817af96933b6507d0d58f45a268a7068be5e0000019c622f645c
+│   │   │   │       │   │       ├── ab46f7c66523b4e7a4c8fc8a0975741def1f264a0d84448b163a136787ec1f8e0000019c623c335a
+│   │   │   │       │   │       └── b0b13bd2a1cc772153adf7e82a1c7b69181f9f02e24ea7987c410cc34b2e63400000019c622f64ba
+│   │   │   │       │   └── miniflare-KVNamespaceObject/
+│   │   │   │       │       └── 544dbedac54537fab191c82cd4f5a931dcfc1110a610a709ee9e64c5f4cf55fc.sqlite
+│   │   │   │       ├── r2/
+│   │   │   │       │   └── miniflare-R2BucketObject/
+│   │   │   │       └── workflows/
+│   │   │   └── tmp/
+│   │   ├── migrations/
+│   │   │   ├── meta/
+│   │   │   │   ├── _journal.json
+│   │   │   │   └── 0000_snapshot.json
+│   │   │   └── 0000_cuddly_toro.sql
+│   │   ├── public/
+│   │   │   ├── css/
+│   │   │   │   └── style.css
+│   │   │   ├── icons/
+│   │   │   │   ├── android-chrome-192x192.png
+│   │   │   │   ├── android-chrome-512x512.png
+│   │   │   │   ├── apple-touch-icon.png
+│   │   │   │   ├── favicon-16x16.png
+│   │   │   │   └── favicon-32x32.png
+│   │   │   ├── img/
+│   │   │   │   └── social-preview.png
+│   │   │   ├── js/
+│   │   │   │   └── dashboard.js
+│   │   │   ├── favicon.ico
+│   │   │   ├── robots.txt
+│   │   │   ├── site.webmanifest
+│   │   │   └── sitemap.xml
+│   │   ├── src/
+│   │   │   ├── db/
+│   │   │   │   ├── index.ts
+│   │   │   │   └── schema.ts
+│   │   │   ├── middleware/
+│   │   │   │   ├── auth.ts
+│   │   │   │   └── rate-limit.ts
+│   │   │   ├── routes/
+│   │   │   │   ├── core/
+│   │   │   │   │   ├── auth/
+│   │   │   │   │   │   ├── index.ts
+│   │   │   │   │   │   └── password.ts
+│   │   │   │   │   ├── health.ts
+│   │   │   │   │   └── webhooks.ts
+│   │   │   │   ├── platform/
+│   │   │   │   │   ├── payments.ts
+│   │   │   │   │   └── storage.ts
+│   │   │   │   └── products/
+│   │   │   │       ├── agro/
+│   │   │   │       │   └── index.ts
+│   │   │   │       ├── rwa/
+│   │   │   │       │   └── index.ts
+│   │   │   │       └── blog.ts
+│   │   │   ├── services/
+│   │   │   │   ├── audit.ts
+│   │   │   │   ├── auth.ts
+│   │   │   │   ├── email.ts
+│   │   │   │   └── market.ts
+│   │   │   ├── types/
+│   │   │   │   ├── bindings.d.ts
+│   │   │   │   └── manifest.d.ts
+│   │   │   ├── utils/
+│   │   │   │   ├── auth-guard.ts
+│   │   │   │   └── response.ts
+│   │   │   ├── validators/
+│   │   │   │   └── auth.ts
+│   │   │   ├── views/
+│   │   │   │   └── dashboard.ts
+│   │   │   └── index.ts
+│   │   ├── test/
+│   │   │   ├── contracts/
+│   │   │   │   └── post.contract.ts
+│   │   │   ├── helpers/
+│   │   │   │   ├── api.ts
+│   │   │   │   ├── auth.ts
+│   │   │   │   └── data-factory.ts
+│   │   │   ├── api-flow.e2e.spec.ts
+│   │   │   ├── env.d.ts
+│   │   │   ├── index.spec.ts
+│   │   │   └── tsconfig.json
+│   │   ├── .dev.vars
+│   │   ├── .editorconfig
+│   │   ├── .gitignore
+│   │   ├── .prettierrc
+│   │   ├── drizzle.config.ts
+│   │   ├── package.json
+│   │   ├── README.md
+│   │   ├── tsconfig.json
+│   │   ├── vitest.config.mts
+│   │   ├── worker-configuration.d.ts
+│   │   └── wrangler.jsonc
 \`\`\`
 
 ## 14. Configuração e Setup

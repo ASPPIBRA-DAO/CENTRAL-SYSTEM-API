@@ -6,8 +6,8 @@
  */
 
 import { Hono } from 'hono';
-import { success, error } from '../../../utils/response'; 
-import { rateLimit } from '../../../middleware/rate-limit'; 
+import { success, error } from '../../utils/response'; 
+import { rateLimit } from '../../middleware/rate-limit'; 
 
 type Bindings = {
   DB: D1Database;
