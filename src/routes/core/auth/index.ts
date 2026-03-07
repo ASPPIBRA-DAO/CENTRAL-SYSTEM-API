@@ -28,7 +28,7 @@ async function hashToken(token: string) {
 // Tolerante a atualizações de navegador e saltos de rede mobile, mas letal contra session cloning.
 async function createFingerprint(ip: string, ua: string) {
   const subnet = ip.includes(':') ? ip.split(':').slice(0, 4).join(':') : ip.split('.').slice(0, 3).join('.');
-  const normalizedUa = ua.replace(/[\d.]+/g, ''); // Remove versões numéricas
+  const normalizedUa = ua.replace(/[^a-zA-Z]+/g, ''); // Remove versões e caracteres especiais
   const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${subnet}|${normalizedUa}`));
   return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
@@ -105,7 +105,7 @@ auth.post('/register', zValidator('json', registerSchema), async (c) => {
       passwordHash: hashedPassword,
       firstName,
       lastName,
-      role: 'citizen',
+      role: 'user', // ✅ CORREÇÃO: Alinhado com o ENUM 'user', 'admin', 'system'
     }).returning().get();
 
     c.executionCtx.waitUntil(
@@ -253,7 +253,7 @@ auth.post('/login', zValidator('json', loginSchema), async (c) => {
       db.insert(sessions).values({
         id: sessionId,
         userId: user.id,
-        token: hashedRefresh, 
+        tokenHash: hashedRefresh, // ✅ CORREÇÃO: Nome da coluna alinhado com schema.ts
         expiresAt: new Date(refreshExp * 1000),
         ipAddress: currentIp,
         userAgent: currentUa
@@ -315,7 +315,7 @@ auth.post('/refresh', async (c) => {
     }
 
     const hashedInput = await hashToken(tokenStr);
-    if (session.token !== hashedInput) throw new Error();
+    if (session.tokenHash !== hashedInput) throw new Error(); // ✅ CORREÇÃO: Comparação com a coluna correta
 
     // 🛡️ ADAPTIVE DEVICE FINGERPRINTING (Dynamic Logic sem coluna Metadata)
     const currentIp = c.req.header('cf-connecting-ip') || '127.0.0.1';
@@ -356,7 +356,7 @@ auth.post('/refresh', async (c) => {
       Promise.all([
         db.delete(sessions).where(eq(sessions.id, session.id)),
         db.insert(sessions).values({
-          id: newSessionId, userId: user.id, token: hashedNewRefresh, 
+          id: newSessionId, userId: user.id, tokenHash: hashedNewRefresh, // ✅ CORREÇÃO: Nome da coluna alinhado
           expiresAt: new Date(refreshExp * 1000), ipAddress: currentIp, userAgent: currentUa
         })
       ])
