@@ -100,18 +100,20 @@ app.use('*', async (c, next) => {
     const executionTime = Date.now() - start;
 
     c.executionCtx.waitUntil(
-      audit.log({
-        action: "API_REQUEST",
-        ip: c.req.header("cf-connecting-ip") || "unknown",
-        country: c.req.header("cf-ipcountry") || "XX",
-        status: c.res.ok ? "success" : "failure",
-        metadata: {
-          path,
-          method: c.req.method,
-          executionTimeMs: executionTime,
-          ua: c.req.header("user-agent")
-        }
-      })
+      (async () => {
+        audit.log({
+          action: "API_REQUEST",
+          ip: c.req.header("cf-connecting-ip") || "unknown",
+          country: c.req.header("cf-ipcountry") || "XX",
+          status: c.res.ok ? "success" : "failure",
+          metadata: {
+            path,
+            method: c.req.method,
+            executionTimeMs: executionTime,
+            ua: c.req.header("user-agent")
+          }
+        });
+      })()
     );
   }
 });
