@@ -2,181 +2,323 @@
  * Copyright 2026 ASPPIBRA
  * Project: Governance System (ASPPIBRA DAO)
  * Role: Database Schema (Drizzle ORM + SQLite D1)
- * Version: 10.0.0 (Absolute Enterprise 10/10)
+ * Version: 11.0.0 (High-Throughput Data Architecture)
  *
- * ======================================================================
- * MIGRATION NOTES (D1) — OBRIGATÓRIO APLICAR VIA SQL
- * ======================================================================
- *
- * 1️⃣ TRIGGERS updated_at (Loop Protected)
- *
- * CREATE TRIGGER trg_users_updated_at AFTER UPDATE ON users FOR EACH ROW
- * WHEN OLD.updated_at = NEW.updated_at -- Only trigger if app didn't update it
- * BEGIN UPDATE users SET updated_at = strftime('%s','now') WHERE id = NEW.id; END;
- *
- * CREATE TRIGGER trg_posts_updated_at AFTER UPDATE ON posts FOR EACH ROW
- * WHEN OLD.updated_at = NEW.updated_at
- * BEGIN UPDATE posts SET updated_at = strftime('%s','now') WHERE id = NEW.id; END;
- *
- * CREATE TRIGGER trg_contracts_updated_at AFTER UPDATE ON contracts FOR EACH ROW
- * WHEN OLD.updated_at = NEW.updated_at
- * BEGIN UPDATE contracts SET updated_at = strftime('%s','now') WHERE id = NEW.id; END;
- *
- * ----------------------------------------------------------------------
- * 2️⃣ EMAIL LOWERCASE CHECK
- *
- * ALTER TABLE users ADD CONSTRAINT chk_email_lower CHECK (email_normalized = lower(email));
- *
- * ----------------------------------------------------------------------
- * ✔ wrangler d1 migrations apply <DB>
  */
 
-import { sqliteTable, text, integer, index, uniqueIndex, primaryKey, check } from "drizzle-orm/sqlite-core";
+import { AnySQLiteColumn, sqliteTable, text, integer, index, uniqueIndex, primaryKey, check } from "drizzle-orm/sqlite-core";
 import { sql, relations } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import { z } from "zod";
 
 // ======================================================================
-// === HELPERS ===
+// === 🕒 HIGH-PRECISION TIMESTAMPS (Step 2) ===
 // ======================================================================
-
-const timestamps = {
-  createdAt: integer('created_at', { mode: 'timestamp' })
+const timestampsMs = {
+  // mode: 'timestamp_ms' mapeia o INT (ms) para Date() nativo no JS
+  createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .notNull()
-    .default(sql`(strftime('%s','now'))`),
+    .default(sql`(unixepoch('now') * 1000)`),
   
-  // ✅ CONSISTENCY: Update handled solely by SQL Trigger
-  updatedAt: integer('updated_at', { mode: 'timestamp' })
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
     .notNull()
-    .default(sql`(strftime('%s','now'))`),
+    .default(sql`(unixepoch('now') * 1000)`),
     
-  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+  deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
 };
 
 // ======================================================================
-// === 1. USERS ===
+// === 1. USERS (HARDENED VERSION) ===
 // ======================================================================
 
 export const users = sqliteTable('users', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createId()),
 
+  // ------------------------------------------------------------------
+  // Identity
+  // ------------------------------------------------------------------
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),
-  
-  email: text('email').notNull(),
 
-  /**
-   * ✅ SECURITY: Normalized Email
-   * Consistency enforced via CHECK constraint.
-   */
+  email: text('email').notNull(),
   emailNormalized: text('email_normalized').notNull(),
 
+  // ------------------------------------------------------------------
+  // Authentication
+  // ------------------------------------------------------------------
   passwordHash: text('password_hash').notNull(),
-  passwordUpdatedAt: integer('password_updated_at', { mode: 'timestamp' }),
+  passwordUpdatedAt: integer('password_updated_at', { mode: 'timestamp_ms' }),
 
-  emailVerified: integer('email_verified', { mode: 'boolean' }).default(false),
-  emailVerifiedAt: integer('email_verified_at', { mode: 'timestamp' }),
+  // ------------------------------------------------------------------
+  // Email Verification
+  // ------------------------------------------------------------------
+  emailVerified: integer('email_verified', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+
+  emailVerifiedAt: integer('email_verified_at', { mode: 'timestamp_ms' }),
+
   avatarUrl: text('avatar_url'),
 
-  // 🔒 SECURITY: Renamed to enforce encryption at rest
+  // ------------------------------------------------------------------
+  // MFA
+  // ------------------------------------------------------------------
   mfaSecretEncrypted: text('mfa_secret_encrypted'),
-  mfaEnabled: integer('mfa_enabled', { mode: 'boolean' }).default(false),
 
-  lastLoginAt: integer('last_login_at', { mode: 'timestamp' }),
-  loginAttempts: integer('login_attempts').default(0),
-  lockUntil: integer('lock_until', { mode: 'timestamp' }),
+  mfaEnabled: integer('mfa_enabled', { mode: 'boolean' })
+    .notNull()
+    .default(false),
 
+  // ------------------------------------------------------------------
+  // Login Protection
+  // ------------------------------------------------------------------
+  lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
+
+  loginAttempts: integer('login_attempts')
+    .notNull()
+    .default(0),
+
+  lockUntil: integer('lock_until', { mode: 'timestamp_ms' }),
+
+  // ------------------------------------------------------------------
+  // Compliance (KYC)
+  // ------------------------------------------------------------------
   kycStatus: text('kyc_status', {
-    enum: ['none', 'pending', 'approved', 'rejected']
-  }).default('none'),
+    enum: ['none', 'pending', 'approved', 'rejected'],
+  })
+    .notNull()
+    .default('none'),
 
-  kycUpdatedAt: integer('kyc_updated_at', { mode: 'timestamp' }),
+  kycUpdatedAt: integer('kyc_updated_at', { mode: 'timestamp_ms' }),
 
+  // ------------------------------------------------------------------
+  // Authorization
+  // ------------------------------------------------------------------
   role: text('role', {
-    enum: ['citizen', 'partner', 'admin', 'system']
-  }).default('citizen'),
+    enum: ['user', 'admin', 'system'],
+  })
+    .notNull()
+    .default('user'),
 
-  ...timestamps,
+  // ------------------------------------------------------------------
+  // System Timestamps (createdAt, updatedAt, deletedAt)
+  // ------------------------------------------------------------------
+  ...timestampsMs,
 
 }, (table) => ({
-  roleIdx: index('idx_users_role').on(table.role),
-  deletedIdx: index('idx_users_deleted').on(table.deletedAt),
-  
-  // ✅ PERFORMANCE: Dashboard Activity Sorting
-  lastLoginIdx: index('idx_users_last_login').on(table.lastLoginAt),
-  lockIdx: index('idx_users_lock').on(table.lockUntil),
-  kycIdx: index('idx_users_kyc').on(table.kycStatus),
-  mfaIdx: index('idx_users_mfa').on(table.mfaEnabled),
 
-  /**
-   * ✅ PERFORMANCE: Optimized Login Query
-   */
+  // ------------------------------------------------------------------
+  // INDEXES
+  // ------------------------------------------------------------------
+
+  roleIdx: index('idx_users_role')
+    .on(table.role),
+
   loginIdx: index('idx_users_login')
     .on(table.emailNormalized, table.deletedAt),
 
-  /**
-   * ✅ NATIVE PARTIAL INDEX: Active Email Unique Constraint
-   * Allows reusing emails if the previous account is deleted.
-   */
+  lockIdx: index('idx_users_lock_until')
+    .on(table.lockUntil),
+
   emailActiveUnique: uniqueIndex('idx_users_email_active_unique')
     .on(table.emailNormalized)
     .where(sql`${table.deletedAt} IS NULL`),
-  
-  // ✅ CONSISTENCY & SECURITY CHECKS
-  pwdHashLenCheck: check('chk_pwd_hash_len', sql`length(${table.passwordHash}) >= 60`),
-  loginAttemptsCheck: check('chk_login_attempts', sql`${table.loginAttempts} >= 0`),
-  mfaBoolCheck: check('chk_mfa_bool', sql`${table.mfaEnabled} IN (0, 1)`),
-  mfaIntegrityCheck: check('chk_mfa_secret', sql`${table.mfaEnabled} = 0 OR ${table.mfaSecretEncrypted} IS NOT NULL`),
-  emailVerifiedBoolCheck: check('chk_email_verified_bool', sql`${table.emailVerified} IN (0, 1)`),
-  emailLowerCheck: check('chk_email_lower', sql`${table.emailNormalized} = lower(${table.email})`),
-  emailFormatCheck: check('chk_email_format', sql`${table.email} LIKE '%_@__%.__%'`),
-  
-  // ✅ TEMPORAL INTEGRITY
-  deletedCreatedCheck: check('chk_users_deleted_created', sql`${table.deletedAt} IS NULL OR ${table.deletedAt} >= ${table.createdAt}`),
+
+  // ------------------------------------------------------------------
+  // CHECK CONSTRAINTS (INTEGRITY HARDENING)
+  // ------------------------------------------------------------------
+
+  // Password must look like real bcrypt/argon hash
+  pwdHashLenCheck: check(
+    'chk_pwd_hash_len',
+    sql`length(${table.passwordHash}) >= 60`
+  ),
+
+  // loginAttempts cannot be negative
+  loginAttemptsNonNegative: check(
+    'chk_login_attempts_non_negative',
+    sql`${table.loginAttempts} >= 0`
+  ),
+
+  // Basic email format validation
+  emailFormatCheck: check(
+    'chk_email_format',
+    sql`${table.emailNormalized} LIKE '%@%.__%'`
+  ),
+
+  // Email verified consistency
+  emailVerificationConsistency: check(
+    'chk_email_verification_consistency',
+    sql`
+      (
+        ${table.emailVerified} = 0 AND ${table.emailVerifiedAt} IS NULL
+      )
+      OR
+      (
+        ${table.emailVerified} = 1 AND ${table.emailVerifiedAt} IS NOT NULL
+      )
+    `
+  ),
+
+  // MFA consistency
+  mfaConsistency: check(
+    'chk_mfa_consistency',
+    sql`
+      (
+        ${table.mfaEnabled} = 0 AND ${table.mfaSecretEncrypted} IS NULL
+      )
+      OR
+      (
+        ${table.mfaEnabled} = 1 AND ${table.mfaSecretEncrypted} IS NOT NULL
+      )
+    `
+  ),
+
+  // Lock consistency
+  lockTimeConsistency: check(
+    'chk_lock_time_consistency',
+    sql`
+      ${table.lockUntil} IS NULL
+      OR
+      ${table.lastLoginAt} IS NULL
+      OR
+      ${table.lockUntil} >= ${table.lastLoginAt}
+    `
+  ),
+
+  // KYC consistency
+  kycConsistency: check(
+    'chk_kyc_consistency',
+    sql`
+      (
+        ${table.kycStatus} = 'none' AND ${table.kycUpdatedAt} IS NULL
+      )
+      OR
+      (
+        ${table.kycStatus} != 'none' AND ${table.kycUpdatedAt} IS NOT NULL
+      )
+    `
+  ),
+
 }));
 
-// --- RELATIONS ---
 export const usersRelations = relations(users, ({ many }) => ({
   posts: many(posts),
   wallets: many(wallets),
   contracts: many(contracts),
-  passwordResets: many(passwordResets),
-  favorites: many(postFavorites),
   sessions: many(sessions),
 }));
 
-// --- ZOD SCHEMAS ---
-export const insertUserSchema = createInsertSchema(users);
-export const selectUserSchema = createSelectSchema(users);
-
 // ======================================================================
-// === 2. SESSIONS ===
+// === 2. SESSIONS (HARDENED VERSION)
 // ======================================================================
 
 export const sessions = sqliteTable('sessions', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createId()),
+
+  // ------------------------------------------------------------------
+  // Relationship
+  // ------------------------------------------------------------------
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
-  
-  token: text('token').notNull().unique(),
-  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-  revokedAt: integer('revoked_at', { mode: 'timestamp' }), // ✅ AUDIT: Explicit revocation
-  
+
+  // ------------------------------------------------------------------
+  // Security (store HASH, never raw token)
+  // ------------------------------------------------------------------
+  tokenHash: text('token_hash')
+    .notNull()
+    .unique(),
+
+  // ------------------------------------------------------------------
+  // Expiration & Revocation
+  // ------------------------------------------------------------------
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' })
+    .notNull(),
+
+  revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+
+  // ------------------------------------------------------------------
+  // Audit Metadata
+  // ------------------------------------------------------------------
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
-  
-  createdAt: timestamps.createdAt,
+
+  createdAt: timestampsMs.createdAt,
+
 }, (table) => ({
-  userIdx: index('idx_sessions_user').on(table.userId),
-  expiresIdx: index('idx_sessions_expires').on(table.expiresAt), // ✅ MAINTENANCE: Cleanup
-  
-  ipLenCheck: check('chk_ip_len', sql`length(${table.ipAddress}) <= 45`),
-  // ✅ TEMPORAL INTEGRITY
-  expiresCreatedCheck: check('chk_session_expires_created', sql`${table.expiresAt} > ${table.createdAt}`),
+
+  // ------------------------------------------------------------------
+  // INDEXES
+  // ------------------------------------------------------------------
+
+  userIdx: index('idx_sessions_user')
+    .on(table.userId),
+
+  expiresIdx: index('idx_sessions_expires')
+    .on(table.expiresAt),
+
+  tokenIdx: index('idx_sessions_token_hash')
+    .on(table.tokenHash),
+
+  activeSessionIdx: index('idx_sessions_active_user')
+    .on(table.userId, table.revokedAt, table.expiresAt),
+
+  // ------------------------------------------------------------------
+  // CHECK CONSTRAINTS (INTEGRITY HARDENING)
+  // ------------------------------------------------------------------
+
+  // Token hash must look like SHA-256 (64 hex chars)
+  tokenHashLengthCheck: check(
+    'chk_token_hash_length',
+    sql`length(${table.tokenHash}) >= 64`
+  ),
+
+  // Expiration must be after creation
+  expirationAfterCreation: check(
+    'chk_expiration_after_creation',
+    sql`${table.expiresAt} > ${table.createdAt}`
+  ),
+
+  // Revocation must be after creation
+  revocationAfterCreation: check(
+    'chk_revocation_after_creation',
+    sql`
+      ${table.revokedAt} IS NULL
+      OR
+      ${table.revokedAt} >= ${table.createdAt}
+    `
+  ),
+
+  // IP length safety
+  ipLengthCheck: check(
+    'chk_ip_length',
+    sql`
+      ${table.ipAddress} IS NULL
+      OR
+      length(${table.ipAddress}) <= 45
+    `
+  ),
+
+  // UserAgent sanity limit
+  userAgentLengthCheck: check(
+    'chk_user_agent_length',
+    sql`
+      ${table.userAgent} IS NULL
+      OR
+      length(${table.userAgent}) <= 500
+    `
+  ),
+
 }));
+
+// ----------------------------------------------------------------------
+// RELATIONS
+// ----------------------------------------------------------------------
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, {
@@ -186,280 +328,650 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
 }));
 
 // ======================================================================
-// === 3. PASSWORD RESETS ===
+// === 3. PASSWORD RESETS (HARDENED VERSION)
 // ======================================================================
 
 export const passwordResets = sqliteTable('password_resets', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createId()),
 
+  // ------------------------------------------------------------------
+  // Relationship
+  // ------------------------------------------------------------------
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
 
-  tokenHash: text('token_hash').notNull().unique(),
+  // ------------------------------------------------------------------
+  // Security (store only HASH)
+  // ------------------------------------------------------------------
+  tokenHash: text('token_hash')
+    .notNull(),
 
+  // ------------------------------------------------------------------
+  // Audit Metadata
+  // ------------------------------------------------------------------
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
 
-  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-  used: integer('used', { mode: 'boolean' }).default(false),
-  usedAt: integer('used_at', { mode: 'timestamp' }), // ✅ AUDIT: Usage timestamp
+  // ------------------------------------------------------------------
+  // Expiration
+  // ------------------------------------------------------------------
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' })
+    .notNull(),
 
-  createdAt: timestamps.createdAt,
+  // ------------------------------------------------------------------
+  // State Machine
+  // ------------------------------------------------------------------
+  used: integer('used', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+
+  usedAt: integer('used_at', { mode: 'timestamp_ms' }),
+
+  createdAt: timestampsMs.createdAt,
 
 }, (table) => ({
-  userIdx: index('idx_pwd_reset_user').on(table.userId),
-  expiresIdx: index('idx_pwd_reset_expires').on(table.expiresAt),
-  usedIdx: index('idx_pwd_reset_used').on(table.used),
-  
-  // ✅ INTEGRITY: Expiration must be in the future
-  expiresCheck: check('chk_pwd_reset_expires', sql`${table.expiresAt} > ${table.createdAt}`),
-  usedBoolCheck: check('chk_pwd_reset_used_bool', sql`${table.used} IN (0, 1)`),
-  
-  /**
-   * ✅ PERFORMANCE: Partial Index for Valid Tokens
-   */
-  validTokenIdx: index('idx_pwd_reset_valid')
-    .on(table.userId)
-    .where(sql`${table.used} = 0`),
-}));
 
-export const passwordResetsRelations = relations(passwordResets, ({ one }) => ({
-  user: one(users, {
-    fields: [passwordResets.userId],
-    references: [users.id],
-  }),
+  // ------------------------------------------------------------------
+  // UNIQUE: Single Active Token per User
+  // (prevents multiple valid resets simultaneously)
+  // ------------------------------------------------------------------
+  singleActiveTokenUnique: uniqueIndex('idx_pwd_reset_single_active')
+    .on(table.userId)
+    .where(sql`
+      ${table.used} = 0
+    `),
+
+  // ------------------------------------------------------------------
+  // Lookup by token
+  // ------------------------------------------------------------------
+  tokenIdx: index('idx_pwd_reset_token_hash')
+    .on(table.tokenHash),
+
+  // ------------------------------------------------------------------
+  // Cleanup expired tokens efficiently
+  // ------------------------------------------------------------------
+  expiresIdx: index('idx_pwd_reset_expires')
+    .on(table.expiresAt),
+
+  // ------------------------------------------------------------------
+  // CHECK CONSTRAINTS (INTEGRITY HARDENING)
+  // ------------------------------------------------------------------
+
+  // Token hash must look like SHA-256 (64 hex chars)
+  tokenHashLengthCheck: check(
+    'chk_pwd_reset_token_hash_length',
+    sql`length(${table.tokenHash}) >= 64`
+  ),
+
+  // Expiration must be after creation
+  expirationAfterCreation: check(
+    'chk_pwd_reset_exp_after_creation',
+    sql`${table.expiresAt} > ${table.createdAt}`
+  ),
+
+  // If used = true, usedAt must exist
+  usedRequiresTimestamp: check(
+    'chk_pwd_reset_used_requires_timestamp',
+    sql`
+      (${table.used} = 0 AND ${table.usedAt} IS NULL)
+      OR
+      (${table.used} = 1 AND ${table.usedAt} IS NOT NULL)
+    `
+  ),
+
+  // usedAt cannot be before creation
+  usedAfterCreation: check(
+    'chk_pwd_reset_used_after_creation',
+    sql`
+      ${table.usedAt} IS NULL
+      OR
+      ${table.usedAt} >= ${table.createdAt}
+    `
+  ),
+
+  // IP length safety (IPv4 + IPv6)
+  ipLengthCheck: check(
+    'chk_pwd_reset_ip_length',
+    sql`
+      ${table.ipAddress} IS NULL
+      OR
+      length(${table.ipAddress}) <= 45
+    `
+  ),
+
+  // UserAgent sanity limit
+  userAgentLengthCheck: check(
+    'chk_pwd_reset_user_agent_length',
+    sql`
+      ${table.userAgent} IS NULL
+      OR
+      length(${table.userAgent}) <= 500
+    `
+  ),
+
 }));
 
 // ======================================================================
-// === 4. WALLETS ===
+// === 4. WALLETS (Web3 Institutional Grade)
 // ======================================================================
 
 export const wallets = sqliteTable('wallets', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createId()),
 
+  // ------------------------------------------------------------------
+  // Ownership
+  // ------------------------------------------------------------------
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
 
+  // ------------------------------------------------------------------
+  // Blockchain Identity
+  // ------------------------------------------------------------------
+
+  // Endereço original (checksum preservado para exibição)
   address: text('address').notNull(),
+
+  // Endereço normalizado (lowercase) para lookup e unique
+  addressNormalized: text('address_normalized').notNull(),
+
+  // Chain EVM ID (1 = Ethereum, 137 = Polygon, etc.)
   chainId: integer('chain_id').notNull(),
 
-  isPrimary: integer('is_primary', { mode: 'boolean' }).default(false),
+  // Wallet primária do usuário
+  isPrimary: integer('is_primary', { mode: 'boolean' })
+    .notNull()
+    .default(false),
 
-  ...timestamps, 
+  // Controle de concorrência otimista
+  version: integer('version')
+    .notNull()
+    .default(1),
+
+  ...timestampsMs,
 
 }, (table) => ({
-  userIdx: index('idx_wallets_user').on(table.userId),
-  
-  // ✅ PERFORMANCE: Standard query for active wallets
-  userDeletedIdx: index('idx_wallet_user_deleted').on(table.userId, table.deletedAt),
-  deletedIdx: index('idx_wallets_deleted').on(table.deletedAt),
-  
-  /**
-   * ✅ MULTI-CHAIN SUPPORT: Address unique per chain
-   */
-  addressChainUnique: uniqueIndex('idx_wallet_address_chain')
-    .on(table.address, table.chainId),
-  
-  /**
-   * ✅ NATIVE PARTIAL INDEX: One primary wallet per user
-   * Ignores soft-deleted wallets.
-   */
-  primaryWalletUnique: uniqueIndex('idx_wallet_primary')
-    .on(table.userId)
-    .where(sql`${table.isPrimary} = 1 AND ${table.deletedAt} IS NULL`),
-  
-  primaryBoolCheck: check('chk_wallet_primary_bool', sql`${table.isPrimary} IN (0, 1)`),
-  // ✅ TEMPORAL INTEGRITY
-  deletedCreatedCheck: check('chk_wallets_deleted_created', sql`${table.deletedAt} IS NULL OR ${table.deletedAt} >= ${table.createdAt}`),
-}));
 
-export const walletsRelations = relations(wallets, ({ one }) => ({
-  user: one(users, {
-    fields: [wallets.userId],
-    references: [users.id],
-  }),
+  // ------------------------------------------------------------------
+  // 🔐 UNIQUE STRATEGY
+  // ------------------------------------------------------------------
+
+  // Garante unicidade real multi-chain usando endereço normalizado
+  addressChainUnique: uniqueIndex('idx_wallet_address_chain_unique')
+    .on(table.addressNormalized, table.chainId),
+
+  // Apenas uma wallet primária ativa por usuário
+  primaryWalletUnique: uniqueIndex('idx_wallet_primary_active_unique')
+    .on(table.userId)
+    .where(sql`
+      ${table.isPrimary} = 1
+      AND ${table.deletedAt} IS NULL
+    `),
+
+  // ------------------------------------------------------------------
+  // ⚡ PERFORMANCE INDEXES
+  // ------------------------------------------------------------------
+
+  // Lookup rápido por usuário (wallets ativas)
+  userActiveIdx: index('idx_wallet_user_active')
+    .on(table.userId)
+    .where(sql`${table.deletedAt} IS NULL`),
+
+  // Lookup rápido por address (ex: login via wallet)
+  addressLookupIdx: index('idx_wallet_address_lookup')
+    .on(table.addressNormalized),
+
+  // Chain-based analytics
+  chainIdx: index('idx_wallet_chain')
+    .on(table.chainId),
+
+  // ------------------------------------------------------------------
+  // 🛡 DOMAIN CONSTRAINTS
+  // ------------------------------------------------------------------
+
+  // ChainId deve ser positivo
+  chainPositiveCheck: check(
+    'chk_wallet_chain_positive',
+    sql`${table.chainId} > 0`
+  ),
+
+  // Endereço EVM deve ter 42 caracteres (0x + 40 hex)
+  addressLengthCheck: check(
+    'chk_wallet_address_len',
+    sql`length(${table.address}) = 42`
+  ),
+
+  // Normalizado também deve ter 42
+  addressNormalizedLengthCheck: check(
+    'chk_wallet_address_normalized_len',
+    sql`length(${table.addressNormalized}) = 42`
+  ),
+
+  // Impede version negativa
+  versionCheck: check(
+    'chk_wallet_version_positive',
+    sql`${table.version} > 0`
+  ),
 }));
 
 // ======================================================================
-// === 5. TAGS ===
+// === 5. TAGS (Scalable & SEO-Ready)
 // ======================================================================
 
 export const tags = sqliteTable('tags', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-  name: text('name').notNull(),
-  slug: text('slug').notNull(),
-  
-  ...timestamps,
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createId()),
+
+  // Nome visível da tag
+  name: text('name')
+    .notNull(),
+
+  // Slug original (para exibição/SEO)
+  slug: text('slug')
+    .notNull(),
+
+  // Slug normalizado (lowercase, sem espaços)
+  slugNormalized: text('slug_normalized')
+    .notNull(),
+
+  // Contador de uso (denormalização para ranking)
+  usageCount: integer('usage_count')
+    .notNull()
+    .default(0),
+
+  // Hierarquia opcional (tag pai)
+  parentId: text('parent_id')
+    .references((): AnySQLiteColumn => tags.id, { onDelete: 'set null' }),
+
+  // Controle de concorrência otimista
+  version: integer('version')
+    .notNull()
+    .default(1),
+
+  ...timestampsMs,
+
 }, (table) => ({
-  /**
-   * ✅ LIFECYCLE: Reusable Slugs/Names via Partial Index
-   */
-  slugActiveUnique: uniqueIndex('idx_tags_slug_active')
-    .on(table.slug)
+
+  // ------------------------------------------------------------------
+  // 🔐 UNIQUE STRATEGY
+  // ------------------------------------------------------------------
+
+  // Slug único apenas entre tags ativas
+  slugActiveUnique: uniqueIndex('idx_tags_slug_active_unique')
+    .on(table.slugNormalized)
     .where(sql`${table.deletedAt} IS NULL`),
-  
-  nameActiveUnique: uniqueIndex('idx_tags_name_active')
-    .on(table.name)
-    .where(sql`${table.deletedAt} IS NULL`),
-  
-  // ✅ TEMPORAL INTEGRITY
-  deletedCreatedCheck: check('chk_tags_deleted_created', sql`${table.deletedAt} IS NULL OR ${table.deletedAt} >= ${table.createdAt}`),
+
+  // ------------------------------------------------------------------
+  // ⚡ PERFORMANCE INDEXES
+  // ------------------------------------------------------------------
+
+  // Busca por nome (admin / painel)
+  nameIdx: index('idx_tags_name')
+    .on(table.name),
+
+  // Ranking por uso
+  usageIdx: index('idx_tags_usage')
+    .on(table.usageCount),
+
+  // Hierarquia
+  parentIdx: index('idx_tags_parent')
+    .on(table.parentId),
+
+  // ------------------------------------------------------------------
+  // 🛡 DOMAIN CONSTRAINTS
+  // ------------------------------------------------------------------
+
+  // Nome mínimo 2 caracteres
+  nameLengthCheck: check(
+    'chk_tags_name_len',
+    sql`length(${table.name}) >= 2`
+  ),
+
+  // Slug mínimo 2 caracteres
+  slugLengthCheck: check(
+    'chk_tags_slug_len',
+    sql`length(${table.slug}) >= 2`
+  ),
+
+  // Slug normalizado apenas lowercase, números e hífen
+  slugFormatCheck: check(
+    'chk_tags_slug_format',
+    sql`${table.slugNormalized} GLOB '[a-z0-9-]*'`
+  ),
+
+  // Usage nunca negativo
+  usageNonNegativeCheck: check(
+    'chk_tags_usage_non_negative',
+    sql`${table.usageCount} >= 0`
+  ),
+
+  // Version sempre positiva
+  versionPositiveCheck: check(
+    'chk_tags_version_positive',
+    sql`${table.version} > 0`
+  ),
 }));
 
-export const tagsRelations = relations(tags, ({ many }) => ({
-  posts: many(postTags),
-}));
-
-export const postTags = sqliteTable('post_tags', {
-  postId: text('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
-  tagId: text('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
-}, (table) => ({
-  pk: primaryKey({ columns: [table.postId, table.tagId] }),
-  tagIdx: index('idx_post_tags_tag').on(table.tagId),
-}));
-
-export const postTagsRelations = relations(postTags, ({ one }) => ({
-  post: one(posts, { fields: [postTags.postId], references: [posts.id] }),
-  tag: one(tags, { fields: [postTags.tagId], references: [tags.id] }),
+export const tagsRelations = relations(tags, ({ one, many }) => ({
+  parent: one(tags, {
+    fields: [tags.parentId],
+    references: [tags.id],
+    relationName: 'parent_tag_hierarchy'
+  }),
+  children: many(tags, {
+    relationName: 'parent_tag_hierarchy'
+  }),
+  posts: many(posts),
 }));
 
 // ======================================================================
-// === 6. POSTS ===
+// === 6. POSTS (Cold Layer - Feed Optimized)
 // ======================================================================
 
 export const posts = sqliteTable('posts', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createId()),
 
+  // ------------------------------------------------------------------
+  // Ownership
+  // ------------------------------------------------------------------
   authorId: text('author_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
 
-  title: text('title').notNull(),
-  slug: text('slug').notNull(),
+  // ------------------------------------------------------------------
+  // Core Content Metadata (Cold)
+  // ------------------------------------------------------------------
+  title: text('title')
+    .notNull(),
+
+  slug: text('slug')
+    .notNull(),
+
+  slugNormalized: text('slug_normalized')
+    .notNull(),
 
   description: text('description'),
-  content: text('content').notNull(),
+
+  // Conteúdo pesado (cold)
+  content: text('content')
+    .notNull(),
 
   coverUrl: text('cover_url'),
 
-  category: text('category').default('Geral'),
+  // Categoria principal (relacional opcional)
+  primaryTagId: text('primary_tag_id')
+    .references(() => tags.id, { onDelete: 'set null' }),
 
-  totalViews: integer('total_views').default(0),
-  totalShares: integer('total_shares').default(0),
-  totalFavorites: integer('total_favorites').default(0),
+  // ------------------------------------------------------------------
+  // Publishing State
+  // ------------------------------------------------------------------
 
-  timeToRead: integer('time_to_read').default(5),
+  status: text('status', {
+    enum: ['draft', 'scheduled', 'published', 'archived']
+  })
+    .notNull()
+    .default('draft'),
 
-  isFeatured: integer('is_featured', { mode: 'boolean' }).default(false),
-  publish: integer('publish', { mode: 'boolean' }).default(false),
+  publishedAt: integer('published_at', { mode: 'timestamp_ms' }),
 
-  ...timestamps,
+  isFeatured: integer('is_featured', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+
+  timeToRead: integer('time_to_read')
+    .notNull()
+    .default(5),
+
+  // Controle de concorrência otimista
+  version: integer('version')
+    .notNull()
+    .default(1),
+
+  ...timestampsMs,
 
 }, (table) => ({
-  authorIdx: index('idx_posts_author').on(table.authorId),
-  categoryIdx: index('idx_posts_category').on(table.category),
-  
-  /**
-   * ✅ LIFECYCLE: Reusable Slugs via Partial Index
-   */
-  slugActiveUnique: uniqueIndex('idx_posts_slug_active')
-    .on(table.slug)
+
+  // ------------------------------------------------------------------
+  // 🔐 UNIQUE STRATEGY
+  // ------------------------------------------------------------------
+
+  slugActiveUnique: uniqueIndex('idx_posts_slug_active_unique')
+    .on(table.slugNormalized)
     .where(sql`${table.deletedAt} IS NULL`),
 
-  /**
-   * ✅ PERFORMANCE: Optimized Feed Query (Covers publish + category)
-   */
-  feedCategoryIdx: index('idx_posts_feed_category')
-    .on(table.publish, table.category, table.createdAt),
-  
-  /**
-   * ✅ PERFORMANCE: Full Feed Index (Publish + Deleted + Time)
-   */
-  feedFullIdx: index('idx_posts_feed_full')
-    .on(table.publish, table.deletedAt, table.createdAt),
+  // ------------------------------------------------------------------
+  // ⚡ FEED INDEXES (Critical Path)
+  // ------------------------------------------------------------------
 
-  /**
-   * ✅ PERFORMANCE: Common Query by Author
-   */
-  authorPublishIdx: index('idx_posts_author_publish')
-    .on(table.authorId, table.publish, table.createdAt),
-  
-  /**
-   * ✅ PERFORMANCE: Slug Search with Publish Status
-   */
-  slugPublishIdx: index('idx_posts_slug_publish').on(table.slug, table.publish),
+  // Feed público principal
+  publicFeedIdx: index('idx_posts_public_feed')
+    .on(table.status, table.publishedAt, table.createdAt)
+    .where(sql`
+      ${table.status} = 'published'
+      AND ${table.deletedAt} IS NULL
+    `),
 
-  feedIdx: index('idx_posts_feed').on(table.publish, table.createdAt),
-  deletedIdx: index('idx_posts_deleted').on(table.deletedAt),
+  // Posts por autor (perfil)
+  authorIdx: index('idx_posts_author')
+    .on(table.authorId, table.createdAt),
 
-  // ✅ CONSISTENCY: Non-negative counters & Boolean checks
-  featuredBoolCheck: check('chk_featured_bool', sql`${table.isFeatured} IN (0, 1)`),
-  publishBoolCheck: check('chk_publish_bool', sql`${table.publish} IN (0, 1)`),
-  
-  /**
-   * ✅ LIFECYCLE: Prevents deleted posts from being published
-   */
-  publishDeletedCheck: check('chk_publish_deleted', sql`${table.deletedAt} IS NULL OR ${table.publish} = 0`),
+  // Destaques
+  featuredIdx: index('idx_posts_featured')
+    .on(table.isFeatured, table.publishedAt)
+    .where(sql`
+      ${table.status} = 'published'
+      AND ${table.deletedAt} IS NULL
+    `),
 
-  viewsPosCheck: check('chk_views_pos', sql`${table.totalViews} >= 0`),
-  sharesPosCheck: check('chk_shares_pos', sql`${table.totalShares} >= 0`),
-  favPosCheck: check('chk_fav_pos', sql`${table.totalFavorites} >= 0`),
-  timePosCheck: check('chk_time_pos', sql`${table.timeToRead} > 0`),
-  
-  // ✅ TEMPORAL INTEGRITY
-  deletedCreatedCheck: check('chk_posts_deleted_created', sql`${table.deletedAt} IS NULL OR ${table.deletedAt} >= ${table.createdAt}`),
+  // Categoria (tag principal)
+  primaryTagIdx: index('idx_posts_primary_tag')
+    .on(table.primaryTagId),
+
+  // ------------------------------------------------------------------
+  // 🛡 DOMAIN CONSTRAINTS
+  // ------------------------------------------------------------------
+
+  titleLengthCheck: check(
+    'chk_posts_title_len',
+    sql`length(${table.title}) >= 3`
+  ),
+
+  slugLengthCheck: check(
+    'chk_posts_slug_len',
+    sql`length(${table.slugNormalized}) >= 3`
+  ),
+
+  slugFormatCheck: check(
+    'chk_posts_slug_format',
+    sql`${table.slugNormalized} GLOB '[a-z0-9-]*'`
+  ),
+
+  timeToReadCheck: check(
+    'chk_posts_time_to_read_positive',
+    sql`${table.timeToRead} > 0`
+  ),
+
+  versionPositiveCheck: check(
+    'chk_posts_version_positive',
+    sql`${table.version} > 0`
+  ),
 }));
 
-export const postsRelations = relations(posts, ({ one, many }) => ({
+// ======================================================================
+// === RELATIONS
+// ======================================================================
+
+export const postsRelations = relations(posts, ({ one }) => ({
   author: one(users, {
     fields: [posts.authorId],
     references: [users.id],
   }),
-  favorites: many(postFavorites),
-  tags: many(postTags),
-}));
 
-// --- POST FAVORITES ---
-export const postFavorites = sqliteTable('post_favorites', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
-
-  postId: text('post_id')
-    .notNull()
-    .references(() => posts.id, { onDelete: 'cascade' }),
-
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-
-  createdAt: timestamps.createdAt,
-
-}, (table) => ({
-  uniqueIdx: uniqueIndex('unique_post_user_favorite')
-    .on(table.postId, table.userId),
-  
-  userIdx: index('idx_post_fav_user').on(table.userId),
-  postIdx: index('idx_post_fav_post').on(table.postId),
-}));
-
-export const postFavoritesRelations = relations(postFavorites, ({ one }) => ({
-  post: one(posts, {
-    fields: [postFavorites.postId],
-    references: [posts.id],
+  metrics: one(postMetrics, {
+    fields: [posts.id],
+    references: [postMetrics.postId],
   }),
-  user: one(users, {
-    fields: [postFavorites.userId],
-    references: [users.id],
+
+  primaryTag: one(tags, {
+    fields: [posts.primaryTagId],
+    references: [tags.id],
   }),
 }));
 
 // ======================================================================
-// === 7. CONTRACTS (RWA) ===
+// === 6.1 POST METRICS (HOT-WRITE ISOLATION - Step 1)
+// ======================================================================
+/**
+ * ✅ HIGH-THROUGHPUT ARCHITECTURE
+ * Isola contadores voláteis da tabela \`posts\` para:
+ * - Evitar lock contention
+ * - Reduzir write amplification
+ * - Melhorar performance de feed
+ * - Permitir recalculo assíncrono de trending
+ *
+ * Esta tabela representa a camada HOT do sistema.
+ */
+export const postMetrics = sqliteTable('post_metrics', {
+  /**
+   * Relação 1:1 com posts
+   * Cada post possui exatamente um registro de métricas.
+   * Cascade garante consistência ao deletar post.
+   */
+  postId: text('post_id')
+    .primaryKey()
+    .references(() => posts.id, { onDelete: 'cascade' }),
+
+  // 🔥 Contadores de alto volume (sempre >= 0)
+  totalViews: integer('total_views')
+    .notNull()
+    .default(0),
+
+  totalShares: integer('total_shares')
+    .notNull()
+    .default(0),
+
+  totalFavorites: integer('total_favorites')
+    .notNull()
+    .default(0),
+
+  /**
+   * Score pré-calculado via cron/worker
+   * Nunca deve ser recalculado em tempo real no request.
+   */
+  trendingScore: integer('trending_score')
+    .notNull()
+    .default(0),
+
+  /**
+   * Atualizado sempre que métricas forem alteradas
+   * Pode ser usado para:
+   * - Reprocessamento incremental
+   * - Debug
+   * - Auditoria
+   */
+  updatedAt: timestampsMs.updatedAt,
+
+}, (table) => ({
+
+  // 🔎 Índice para ordenação de feed por trending
+  trendingIdx: index('idx_post_metrics_trending')
+    .on(table.trendingScore),
+
+  // 🔎 Índice para jobs que reprocessam métricas
+  updatedIdx: index('idx_post_metrics_updated')
+    .on(table.updatedAt),
+
+  // 🔐 Garantias de integridade (nunca negativos)
+  viewsPositiveCheck: check(
+    'chk_post_metrics_views_positive',
+    sql`${table.totalViews} >= 0`
+  ),
+
+  sharesPositiveCheck: check(
+    'chk_post_metrics_shares_positive',
+    sql`${table.totalShares} >= 0`
+  ),
+
+  favoritesPositiveCheck: check(
+    'chk_post_metrics_favorites_positive',
+    sql`${table.totalFavorites} >= 0`
+  ),
+
+  trendingPositiveCheck: check(
+    'chk_post_metrics_trending_positive',
+    sql`${table.trendingScore} >= 0`
+  ),
+
+}));
+
+// ======================================================================
+// === 6.2 FEED SNAPSHOTS (SCALING LAYER - ENTERPRISE READY)
+// ======================================================================
+/**
+ * ✅ O(1) READS
+ * ✅ Snapshot único por tipo
+ * ✅ Versionamento de payload
+ * ✅ Controle de expiração
+ * ✅ Estrutura preparada para multi-ambiente
+ */
+
+export const feedSnapshots = sqliteTable('feed_snapshots', {
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createId()),
+
+  // ENUM forte evita feedTypes arbitrários
+  feedType: text('feed_type', {
+    enum: ['trending', 'recent', 'weekly_top', 'recommended'],
+  }).notNull(),
+
+  // Versão do formato do payload (permite evolução futura sem quebrar leitura)
+  version: integer('version').notNull().default(1),
+
+  // JSON tipado - sempre array serializado
+  dataPayload: text('data_payload', { mode: 'json' }).notNull(),
+
+  // Quando foi gerado
+  generatedAt: integer('generated_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .default(sql`(unixepoch('now') * 1000)`),
+
+  // Controle explícito de expiração (evita stale feed)
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+
+}, (table) => ({
+  // 🔥 Garante apenas 1 snapshot ativo por tipo
+  feedTypeUnique: uniqueIndex('idx_feed_snapshot_type_unique')
+    .on(table.feedType),
+
+  // ⚡ Busca direta por tipo (lookup O(log n))
+  feedTypeIdx: index('idx_feed_snapshot_type')
+    .on(table.feedType),
+
+  // 🧠 Evita versões inválidas
+  versionCheck: check(
+    'chk_feed_snapshot_version_positive',
+    sql`${table.version} > 0`
+  ),
+
+}));
+
+// ======================================================================
+// === 7. CONTRACTS (RWA) – HARDENED FINANCIAL VERSION
 // ======================================================================
 
 export const contracts = sqliteTable('contracts', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createId()),
 
   userId: text('user_id')
     .notNull()
@@ -467,49 +979,102 @@ export const contracts = sqliteTable('contracts', {
 
   description: text('description').notNull(),
 
-  totalValue: integer('total_value').notNull(), // Cents
+  /**
+   * WEB3 SAFE NUMERIC STORAGE
+   * Armazenado como string para suportar uint256.
+   * Validado via CHECK constraint (somente números positivos).
+   */
+  totalValue: text('total_value')
+    .notNull()
+    .$type<string>(),
 
   currency: text('currency', {
-    enum: ['BRL', 'USD', 'USDT']
-  }).default('BRL'),
+    enum: ['BRL', 'USD', 'USDT'],
+  })
+    .notNull()
+    .default('BRL'),
 
-  totalInstallments: integer('total_installments').default(1),
-  
-  installmentsPaid: integer('installments_paid').default(0),
-  nextDueAt: integer('next_due_at', { mode: 'timestamp' }),
+  totalInstallments: integer('total_installments')
+    .notNull()
+    .default(1),
 
-  version: integer('version').default(1),
+  installmentsPaid: integer('installments_paid')
+    .notNull()
+    .default(0),
+
+  nextDueAt: integer('next_due_at', { mode: 'timestamp_ms' }),
+
+  /**
+   * OPTIMISTIC LOCKING
+   */
+  version: integer('version')
+    .notNull()
+    .default(1),
 
   status: text('status', {
-    enum: ['active', 'completed', 'defaulted', 'archived']
-  }).default('active'),
+    enum: ['active', 'completed', 'defaulted', 'archived'],
+  })
+    .notNull()
+    .default('active'),
 
-  ...timestamps,
+  ...timestampsMs,
 
 }, (table) => ({
-  userIdx: index('idx_contracts_user').on(table.userId),
-  statusIdx: index('idx_contracts_status').on(table.status),
-  deletedIdx: index('idx_contracts_deleted').on(table.deletedAt),
-  userStatusIdx: index('idx_contracts_user_status').on(table.userId, table.status),
-  
-  dueIdx: index('idx_contracts_due').on(table.status, table.nextDueAt),
 
-  installmentsCheck: check('chk_installments', sql`${table.installmentsPaid} <= ${table.totalInstallments}`),
-  valuePosCheck: check('chk_value_pos', sql`${table.totalValue} >= 0`),
-  installmentsPaidPosCheck: check('chk_installments_paid_pos', sql`${table.installmentsPaid} >= 0`),
-  totalInstallmentsPosCheck: check('chk_total_installments_pos', sql`${table.totalInstallments} > 0`),
-  currencyCheck: check('chk_currency', sql`${table.currency} IN ('BRL', 'USD', 'USDT')`),
-  
-  completedCheck: check('chk_completed_paid', 
-    sql`(${table.status} != 'completed') OR (${table.installmentsPaid} = ${table.totalInstallments})`),
-  
-  completedDueCheck: check('chk_completed_due', sql`(${table.status} != 'completed') OR (${table.nextDueAt} IS NULL)`),
-  defaultedDueCheck: check('chk_defaulted_due', sql`(${table.status} != 'defaulted') OR (${table.nextDueAt} IS NOT NULL)`),
-  
-  // ✅ TEMPORAL INTEGRITY
-  deletedCreatedCheck: check('chk_contracts_deleted_created', sql`${table.deletedAt} IS NULL OR ${table.deletedAt} >= ${table.createdAt}`),
-  dueCreatedCheck: check('chk_contracts_due_created', sql`${table.nextDueAt} IS NULL OR ${table.nextDueAt} >= ${table.createdAt}`),
+  // ============================================================
+  // INDEXES
+  // ============================================================
+
+  userStatusIdx:
+    index('idx_contracts_user_status')
+      .on(table.userId, table.status),
+
+  /**
+   * Cobrança automática / cron job:
+   * SELECT * FROM contracts
+   * WHERE status = 'active'
+   * AND next_due_at <= now()
+   */
+  dueDateIdx:
+    index('idx_contracts_due_active')
+      .on(table.status, table.nextDueAt)
+      .where(sql`${table.status} = 'active'`),
+
+  // ============================================================
+  // FINANCIAL INTEGRITY CONSTRAINTS
+  // ============================================================
+
+  totalValueNumericCheck:
+    check(
+      'chk_contracts_total_value_numeric',
+      sql`${table.totalValue} GLOB '[0-9]*' AND length(${table.totalValue}) > 0`
+    ),
+
+  totalInstallmentsCheck:
+    check(
+      'chk_contracts_installments_positive',
+      sql`${table.totalInstallments} >= 1`
+    ),
+
+  installmentsPaidCheck:
+    check(
+      'chk_contracts_installments_paid_valid',
+      sql`
+        ${table.installmentsPaid} >= 0
+        AND ${table.installmentsPaid} <= ${table.totalInstallments}
+      `
+    ),
+
+  versionCheck:
+    check(
+      'chk_contracts_version_positive',
+      sql`${table.version} >= 1`
+    ),
 }));
+
+// ============================================================
+// RELATIONS
+// ============================================================
 
 export const contractsRelations = relations(contracts, ({ one }) => ({
   user: one(users, {
@@ -519,23 +1084,39 @@ export const contractsRelations = relations(contracts, ({ one }) => ({
 }));
 
 // ======================================================================
-// === 8. AUDIT LOGS ===
+// === 8. AUDIT LOGS – FORENSIC HARDENED VERSION
 // ======================================================================
 
 export const auditLogs = sqliteTable('audit_logs', {
-  id: text('id').primaryKey().$defaultFn(() => createId()),
+  id: text('id')
+    .primaryKey()
+    .$defaultFn(() => createId()),
 
+  /**
+   * Actor principal (pode ser userId, apiKeyId, systemId)
+   */
   actorId: text('actor_id').notNull(),
-  actorType: text('actor_type', { enum: ['user', 'system', 'api_key'] }).default('user'),
 
+  actorType: text('actor_type', {
+    enum: ['user', 'system', 'api_key'],
+  })
+    .notNull()
+    .default('user'),
+
+  /**
+   * FK real para users (se aplicável)
+   * Não deleta log se usuário for removido.
+   */
   actorUserId: text('actor_user_id')
     .references(() => users.id, { onDelete: 'set null' }),
 
   action: text('action').notNull(),
 
   status: text('status', {
-    enum: ['success', 'fail', 'blocked']
-  }).default('success'),
+    enum: ['success', 'fail', 'blocked'],
+  })
+    .notNull()
+    .default('success'),
 
   entityType: text('entity_type'),
   entityId: text('entity_id'),
@@ -543,30 +1124,63 @@ export const auditLogs = sqliteTable('audit_logs', {
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
 
-  metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
+  /**
+   * JSON controlado
+   */
+  metadata: text('metadata', { mode: 'json' })
+    .$type<Record<string, unknown>>(),
 
-  createdAt: timestamps.createdAt,
+  /**
+   * Anti-tampering chain
+   */
+  previousHash: text('previous_hash'),
+  currentHash: text('current_hash'),
+
+  createdAt: timestampsMs.createdAt,
 
 }, (table) => ({
-  actionIdx: index('idx_audit_action').on(table.action),
-  actorIdx: index('idx_audit_actor').on(table.actorId),
-  
-  actorTimelineIdx: index('idx_audit_actor_timeline').on(table.actorId, table.createdAt),
-  actorUserIdx: index('idx_audit_actor_user').on(table.actorUserId),
-  actorUserTimelineIdx: index('idx_audit_actor_user_time').on(table.actorUserId, table.createdAt),
-  
-  entityTimeIdx: index('idx_audit_entity_time').on(table.entityType, table.createdAt),
 
-  entityIdx: index('idx_audit_entity').on(table.entityType, table.entityId),
-  timeIdx: index('idx_audit_time').on(table.createdAt),
+  // ============================================================
+  // INDEXES
+  // ============================================================
 
-  actorUserCheck: check('chk_audit_user', sql`${table.actorType} != 'user' OR ${table.actorUserId} IS NOT NULL`),
-  metadataSizeCheck: check('chk_metadata_size', sql`length(${table.metadata}) <= 5000`),
-}));
+  actorTimelineIdx:
+    index('idx_audit_actor_timeline')
+      .on(table.actorId, table.createdAt),
 
-export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
-  actorUser: one(users, {
-    fields: [auditLogs.actorUserId],
-    references: [users.id],
-  }),
+  entityTimelineIdx:
+    index('idx_audit_entity_timeline')
+      .on(table.entityType, table.entityId, table.createdAt),
+
+  statusIdx:
+    index('idx_audit_status')
+      .on(table.status, table.createdAt),
+
+  // ============================================================
+  // CONSTRAINTS
+  // ============================================================
+
+  actionNotEmpty:
+    check(
+      'chk_audit_action_not_empty',
+      sql`length(${table.action}) > 0`
+    ),
+
+  metadataSizeLimit:
+    check(
+      'chk_audit_metadata_size',
+      sql`${table.metadata} IS NULL OR length(${table.metadata}) <= 5000`
+    ),
+
+  ipLengthCheck:
+    check(
+      'chk_audit_ip_length',
+      sql`${table.ipAddress} IS NULL OR length(${table.ipAddress}) <= 45`
+    ),
+
+  hashIntegrityCheck:
+    check(
+      'chk_audit_hash_integrity',
+      sql`${table.currentHash} IS NULL OR length(${table.currentHash}) >= 32`
+    ),
 }));
